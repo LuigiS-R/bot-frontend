@@ -2,6 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "http://212.2.247.199:8080/api/:path*"
+    },
+    {
       "source": "/(.*)",
       "destination": "/index.html"
     }

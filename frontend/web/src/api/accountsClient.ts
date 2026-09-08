@@ -1,6 +1,6 @@
 export class ApiError extends Error { constructor(public status: number, public payload: unknown) { super(`API Error ${status}`); } }
 export const errorText = (error: any) => error?.payload?.message || error?.message || "An unexpected error occurred.";
-const base = () => import.meta.env.VITE_ACCOUNTS_API_BASE_URL || "http://localhost:8081";
+const base = () => import.meta.env.VITE_ACCOUNTS_API_BASE_URL || "";
 async function request(path: string, init?: RequestInit) {
   const response = await fetch(base() + path, { ...init, headers: { "Content-Type": "application/json", ...init?.headers } });
   if (!response.ok) { let body: unknown; try { body = await response.json(); } catch { body = await response.text(); } throw new ApiError(response.status, body); }
