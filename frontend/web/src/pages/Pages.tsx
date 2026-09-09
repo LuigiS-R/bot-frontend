@@ -1,11 +1,581 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
+import {
+  Activity, ArrowLeft, Bell, Download, Eye, Inbox, ListChecks, Plus, Power,
+  RefreshCw, Search, Star, Trash2, TrendingUp, Wallet,
+} from "lucide-react";
 import { accounts, errorText } from "../api/accountsClient";
-import type { Dashboard, Watchlist } from "../api/types";
-import { AppShell, DateTime, ErrorPanel, Loading, Money } from "../components/ui";
+import type { Dashboard, Position, Watchlist } from "../api/types";
+import { usePageTitle } from "../hooks/usePageTitle";
+import { useConnection } from "../state/connection";
+import { useToast } from "../state/toast";
+import {
+  AllocationBar, AppShell, DangerButton, DashboardSkeleton, DateTime, EmptyState, ErrorPanel, freshnessMeta,
+  GhostButton, Loading, Money, MetricCard, MiniTrend, Panel, PnL, PrimaryButton,
+  SecondaryButton, SortableTh, StockLogo, TextField, TickerPill,
+} from "../components/ui";
+import type { SortState } from "../components/ui";
 
-export function DashboardPage() { const [data, setData] = useState<Dashboard>(); const [error, setError] = useState(""); const load = () => accounts.dashboard().then(setData).catch(e => setError(errorText(e))); useEffect(() => { void load(); }, []); return <AppShell>{!data && !error ? <Loading /> : <><div className="page-head"><div><h1>Paper-trading dashboard</h1><p className="muted">One configured Alpaca account powers this installation.</p></div><button onClick={() => accounts.reconcile().then(setData).catch(e => setError(errorText(e)))}>Reconcile now</button></div>{error && <ErrorPanel message={error} />}{data && <><section className="grid"><Metric label="Cash" value={<Money value={data.account?.cash} />} /><Metric label="Equity" value={<Money value={data.account?.equity} />} /><Metric label="Portfolio value" value={<Money value={data.account?.portfolioValue} />} /></section><p className="muted">Data: {data.freshness} · last synchronized <DateTime value={data.asOf} /></p><section className="panel"><h2>Positions</h2><table className="data-table"><thead><tr><th>Symbol</th><th>Quantity</th><th>Market value</th></tr></thead><tbody>{data.positions.map(position => <tr key={position.symbol}><td>{position.symbol}</td><td>{position.quantity}</td><td><Money value={position.marketValue} /></td></tr>)}</tbody></table></section></>}</>}</AppShell>; }
-function Metric({ label, value }: { label: string; value: React.ReactNode }) { return <section className="panel metric"><label>{label}</label><strong>{value}</strong></section>; }
-export function WatchlistsPage() { const [items, setItems] = useState<Watchlist[]>([]); const [name, setName] = useState(""); const [symbols, setSymbols] = useState(""); const [error, setError] = useState(""); const load = () => accounts.watchlists().then(setItems).catch(e => setError(errorText(e))); useEffect(() => { void load(); }, []); const create = async () => { try { const result: any = await accounts.createWatchlist(name, symbols.split(",").map(x => x.trim()).filter(Boolean)); window.location.assign(`/watchlists/${result.watchlist.watchlistId}`); } catch (e) { setError(errorText(e)); } }; return <AppShell><h1>Watchlists</h1>{error && <ErrorPanel message={error} />}<section className="panel form"><label>Name<input value={name} onChange={e => setName(e.target.value)} /></label><label>Symbols (comma-separated)<input value={symbols} onChange={e => setSymbols(e.target.value)} /></label><button onClick={create}>Create watchlist</button></section><section className="panel"><ul>{items.map(item => <li key={item.watchlist.watchlistId}><Link to={`/watchlists/${item.watchlist.watchlistId}`}>{item.watchlist.name}</Link> ({item.entries.length} symbols)</li>)}</ul></section></AppShell>; }
-export function WatchlistDetailPage() { const { watchlistId = "" } = useParams(); const nav = useNavigate(); const [data, setData] = useState<Watchlist>(); const [ticker, setTicker] = useState(""); const [error, setError] = useState(""); const load = () => accounts.watchlist(watchlistId).then(setData).catch(e => setError(errorText(e))); useEffect(() => { void load(); }, [watchlistId]); if (!data) return <AppShell>{error ? <ErrorPanel message={error} /> : <Loading />}</AppShell>; return <AppShell><h1>{data.watchlist.name}</h1><div className="actions"><input placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value)} /><button onClick={() => accounts.addTicker(watchlistId, ticker).then(load).catch(e => setError(errorText(e)))}>Add symbol</button><button className="danger" onClick={() => accounts.deleteWatchlist(watchlistId).then(() => nav("/watchlists")).catch(e => setError(errorText(e)))}>Delete</button></div>{error && <ErrorPanel message={error} />}<ul>{data.entries.map(entry => <li key={entry.ticker}>{entry.ticker} · {entry.active ? "active" : "inactive"} <button onClick={() => accounts.toggleTicker(watchlistId, entry.ticker, !entry.active).then(load)}>Toggle</button><button onClick={() => accounts.removeTicker(watchlistId, entry.ticker).then(load)}>Remove</button></li>)}</ul></AppShell>; }
-export function NotFoundPage() { return <AppShell><h1>Page not found</h1><Link to="/dashboard">Return to dashboard</Link></AppShell>; }
+const companyNames: Record<string, string> = {
+  AAPL: "Apple Inc.", NVDA: "NVIDIA Corp.", TSLA: "Tesla Inc.", MSFT: "Microsoft Corp.",
+  AMZN: "Amazon.com Inc.", GOOGL: "Alphabet Inc.", GOOG: "Alphabet Inc.", META: "Meta Platforms Inc.",
+  AMD: "Advanced Micro Devices", NFLX: "Netflix Inc.", DIS: "Walt Disney Co.", BA: "Boeing Co.",
+  JPM: "JPMorgan Chase & Co.", V: "Visa Inc.", MA: "Mastercard Inc.", INTC: "Intel Corp.",
+  SPY: "SPDR S&P 500 ETF", QQQ: "Invesco QQQ Trust",
+};
+
+const watchlistIcons = [ListChecks, Eye, Star, Bell];
+
+type PositionSortKey = "symbol" | "quantity" | "avgPrice" | "currentPrice" | "marketValue" | "pnl";
+
+function positionSortValue(p: Position, key: PositionSortKey): string | number {
+  switch (key) {
+    case "symbol": return p.symbol;
+    case "quantity": return Number(p.quantity) || 0;
+    case "avgPrice": return Number(p.averageEntryPrice) || 0;
+    case "currentPrice": return Number(p.currentPrice) || 0;
+    case "marketValue": return Number(p.marketValue) || 0;
+    case "pnl": return Number(p.unrealizedPnl) || 0;
+  }
+}
+
+function downloadPositionsCsv(positions: Position[]) {
+  const header = ["Symbol", "Shares", "AvgPrice", "CurrentPrice", "MarketValue", "UnrealizedPnL"];
+  const rows = positions.map(p => [p.symbol, p.quantity ?? "", p.averageEntryPrice ?? "", p.currentPrice ?? "", p.marketValue ?? "", p.unrealizedPnl ?? ""]);
+  const csv = [header, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `tradify-positions-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export function DashboardPage() {
+  usePageTitle("Dashboard");
+  const [data, setData] = useState<Dashboard>();
+  const [error, setError] = useState("");
+  const [reconciling, setReconciling] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<"all" | "profit" | "loss">("all");
+  const [sort, setSort] = useState<SortState<PositionSortKey>>({ key: "marketValue", dir: "desc" });
+  const { setFreshness } = useConnection();
+  const { push } = useToast();
+
+  const load = () => accounts.dashboard().then(d => { setData(d); setFreshness(d.freshness); }).catch(e => setError(errorText(e)));
+  useEffect(() => { void load(); }, []);
+
+  const reconcile = async () => {
+    setReconciling(true);
+    try {
+      const d = await accounts.reconcile();
+      setData(d);
+      setFreshness(d.freshness);
+      push("success", "Account reconciled successfully.");
+    } catch (e) { push("error", errorText(e)); }
+    finally { setReconciling(false); }
+  };
+
+  const onSort = (key: PositionSortKey) => setSort(s => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "symbol" ? "asc" : "desc" }));
+
+  const positions = data?.positions ?? [];
+  const totalPnl = positions.reduce((sum, p) => sum + (Number(p.unrealizedPnl) || 0), 0);
+  const totalMarketValue = positions.reduce((sum, p) => sum + (Number(p.marketValue) || 0), 0);
+  const costBasis = positions.reduce((sum, p) => sum + (Number(p.averageEntryPrice) || 0) * (Number(p.quantity) || 0), 0);
+  const totalPnlPercent = costBasis ? (totalPnl / costBasis) * 100 : undefined;
+  const winners = positions.filter(p => Number(p.unrealizedPnl) > 0);
+  const losers = positions.filter(p => Number(p.unrealizedPnl) < 0);
+  const topGainer = positions.reduce<Position | undefined>(
+    (a, b) => (a == null || (Number(b.unrealizedPnl) || -Infinity) > (Number(a.unrealizedPnl) || -Infinity) ? b : a),
+    undefined,
+  );
+  const topGainerPercent = topGainer
+    ? ((Number(topGainer.unrealizedPnl) || 0) / ((Number(topGainer.averageEntryPrice) || 1) * (Number(topGainer.quantity) || 1))) * 100
+    : undefined;
+
+  const visiblePositions = useMemo(() => {
+    const filtered = positions.filter(p => {
+      if (query && !p.symbol.toLowerCase().includes(query.trim().toLowerCase())) return false;
+      const pnl = Number(p.unrealizedPnl) || 0;
+      if (filter === "profit" && pnl <= 0) return false;
+      if (filter === "loss" && pnl >= 0) return false;
+      return true;
+    });
+    const dir = sort.dir === "asc" ? 1 : -1;
+    return [...filtered].sort((a, b) => {
+      const va = positionSortValue(a, sort.key);
+      const vb = positionSortValue(b, sort.key);
+      if (typeof va === "string" || typeof vb === "string") return String(va).localeCompare(String(vb)) * dir;
+      return (va - vb) * dir;
+    });
+  }, [positions, query, filter, sort]);
+
+  const equity = Number(data?.account?.equity);
+  const cash = Number(data?.account?.cash);
+  const inPositions = !Number.isNaN(equity) && !Number.isNaN(cash) ? equity - cash : undefined;
+
+  return (
+    <AppShell>
+      {!data && !error ? (
+        <DashboardSkeleton />
+      ) : (
+        <div className="space-y-6">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Trading overview</h1>
+              {data ? (
+                <div className="mt-1 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <span>Last synchronized <DateTime value={data.asOf} /></span>
+                  <span>•</span>
+                  <span className={`font-medium ${freshnessMeta[data.freshness].text}`}>{freshnessMeta[data.freshness].label}</span>
+                </div>
+              ) : (
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live synchronized metrics from your automated paper execution bot.</p>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <SecondaryButton onClick={() => downloadPositionsCsv(positions)} disabled={positions.length === 0}>
+                <Download size={14} /> Export CSV
+              </SecondaryButton>
+              <PrimaryButton onClick={reconcile} disabled={reconciling}>
+                <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
+                {reconciling ? "Reconciling…" : "Reconcile now"}
+              </PrimaryButton>
+            </div>
+          </div>
+
+          {error && <ErrorPanel message={error} />}
+
+          {data && (
+            <>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+                <MetricCard
+                  icon={Wallet}
+                  label="Available cash"
+                  value={<Money value={data.account?.cash} />}
+                  hint={<p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">Buying power for new positions</p>}
+                />
+                <MetricCard
+                  icon={TrendingUp}
+                  tone="indigo"
+                  label="Net equity"
+                  value={<Money value={data.account?.equity} />}
+                  hint={
+                    inPositions != null && (
+                      <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        <Money value={inPositions} className="font-bold text-slate-700 dark:text-slate-300" /> tied up in open positions
+                      </p>
+                    )
+                  }
+                />
+                <MetricCard
+                  icon={Activity}
+                  tone="emerald"
+                  label="Unrealized P&L"
+                  value={positions.length ? <>{totalPnl >= 0 ? "+" : "-"}<Money value={Math.abs(totalPnl)} /></> : <Money value={undefined} />}
+                  valueClassName={positions.length ? (totalPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400") : undefined}
+                  hint={
+                    positions.length > 0 && (
+                      <p className="mt-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                        {totalPnlPercent != null && <span className={totalPnl >= 0 ? "font-bold text-emerald-600 dark:text-emerald-400" : "font-bold text-rose-600 dark:text-rose-400"}>{totalPnl >= 0 ? "+" : ""}{totalPnlPercent.toFixed(2)}%</span>} return across {positions.length} position{positions.length === 1 ? "" : "s"}
+                      </p>
+                    )
+                  }
+                />
+              </div>
+
+              <Panel className="overflow-hidden">
+                <div className="flex flex-col gap-4 border-b border-slate-200/80 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-bold text-slate-900 dark:text-white">Positions</h2>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700 dark:bg-slate-800 dark:text-slate-300">{visiblePositions.length}</span>
+                    </div>
+                    {positions.length > 0 && (
+                      <>
+                        <span className="hidden h-4 w-px bg-slate-200 dark:bg-slate-700 sm:block" />
+                        <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                          <span>Winners: <strong className="font-semibold text-emerald-600 dark:text-emerald-400">{winners.length}</strong></span>
+                          <span>Losers: <strong className="font-semibold text-rose-600 dark:text-rose-400">{losers.length}</strong></span>
+                          {topGainer && (
+                            <span>Top: <span className="font-semibold text-slate-800 dark:text-slate-200">{topGainer.symbol} {Number(topGainer.unrealizedPnl) >= 0 ? "+" : ""}{(topGainerPercent ?? 0).toFixed(2)}%</span></span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  {positions.length > 0 && (
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                      <div className="relative">
+                        <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                          type="text"
+                          value={query}
+                          onChange={e => setQuery(e.target.value)}
+                          placeholder="Filter ticker…"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:w-44"
+                        />
+                      </div>
+                      <div className="flex rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+                        {(["all", "profit", "loss"] as const).map(key => (
+                          <button
+                            key={key}
+                            onClick={() => setFilter(key)}
+                            className={`rounded-md px-2.5 py-1 text-[11px] font-bold capitalize transition ${
+                              filter === key
+                                ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
+                                : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                            }`}
+                          >
+                            {key}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {positions.length === 0 ? (
+                  <EmptyState icon={Inbox} title="No open positions." subtitle="Bot is monitoring market signals." />
+                ) : visiblePositions.length === 0 ? (
+                  <EmptyState icon={Search} title="No matching positions." subtitle="Try a different search or filter." />
+                ) : (() => {
+                  const rows = visiblePositions.map(position => {
+                    const avg = Number(position.averageEntryPrice);
+                    const current = Number(position.currentPrice);
+                    const pnl = Number(position.unrealizedPnl);
+                    const pnlPercent = avg ? ((current - avg) / avg) * 100 : undefined;
+                    const marketValue = Number(position.marketValue) || 0;
+                    const allocation = totalMarketValue ? (marketValue / totalMarketValue) * 100 : 0;
+                    const companyName = companyNames[position.symbol];
+                    return { position, avg, current, pnl, pnlPercent, marketValue, allocation, companyName };
+                  });
+                  return (
+                    <>
+                      {/* Mobile: stacked cards — a scrolled-down table reads poorly on narrow screens */}
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800 sm:hidden">
+                        {rows.map(({ position, pnl, pnlPercent, allocation, companyName }) => (
+                          <li key={position.symbol} className="flex flex-col gap-3 px-5 py-4">
+                            <div className="flex items-start gap-3">
+                              <StockLogo symbol={position.symbol} />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-sm font-bold leading-tight text-slate-900 dark:text-white">{position.symbol}</div>
+                                {companyName && <div className="truncate text-xs leading-tight text-slate-500 dark:text-slate-400">{companyName}</div>}
+                              </div>
+                              <div className="shrink-0 text-right">
+                                <div className="text-sm font-bold tabular-nums text-slate-900 dark:text-white"><Money value={position.marketValue} /></div>
+                                <PnL amount={pnl} percent={pnlPercent} />
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 px-3 py-2 dark:bg-slate-800/60">
+                              <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Shares</div>
+                                <div className="mt-0.5 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">{position.quantity ?? "—"}</div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Avg cost</div>
+                                <div className="mt-0.5 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300"><Money value={position.averageEntryPrice} /></div>
+                              </div>
+                              <div>
+                                <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Current</div>
+                                <div className="mt-0.5 text-xs font-semibold tabular-nums text-slate-700 dark:text-slate-300">
+                                  <Money value={position.currentPrice} />
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <AllocationBar percent={allocation} />
+                              <span className="text-[11px] text-slate-400">of portfolio</span>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+
+                      {/* Tablet and up: full data table */}
+                      <div className="relative hidden sm:block">
+                        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-white to-transparent dark:from-slate-900 md:hidden" />
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-xs">
+                            <thead>
+                              <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-800/40">
+                                <SortableTh label="Asset" sortKey="symbol" sort={sort} onSort={onSort} />
+                                <SortableTh label="Shares" sortKey="quantity" sort={sort} onSort={onSort} align="center" />
+                                <SortableTh label="Avg price" sortKey="avgPrice" sort={sort} onSort={onSort} align="right" />
+                                <SortableTh label="Market price & trend" sortKey="currentPrice" sort={sort} onSort={onSort} align="center" />
+                                <SortableTh label="Market value" sortKey="marketValue" sort={sort} onSort={onSort} align="right" />
+                                <th className="px-6 py-3">Allocation</th>
+                                <SortableTh label="Unrealized P&L" sortKey="pnl" sort={sort} onSort={onSort} align="right" />
+                                <th className="px-6 py-3 text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                              {rows.map(({ position, avg, current, pnl, pnlPercent, allocation, companyName }) => (
+                                <tr key={position.symbol} className="transition hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                                  <td className="px-6 py-3.5 align-top">
+                                    <div className="flex items-start gap-3">
+                                      <StockLogo symbol={position.symbol} />
+                                      <div className="min-w-0">
+                                        <div className="text-sm font-bold leading-tight text-slate-900 dark:text-white">{position.symbol}</div>
+                                        {companyName && <div className="mt-0.5 truncate text-xs leading-tight text-slate-500 dark:text-slate-400">{companyName}</div>}
+                                      </div>
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3.5 text-center align-top font-semibold tabular-nums text-slate-700 dark:text-slate-300">{position.quantity ?? "—"}</td>
+                                  <td className="px-4 py-3.5 text-right align-top"><Money value={position.averageEntryPrice} className="text-slate-500 dark:text-slate-400" /></td>
+                                  <td className="px-6 py-3.5 align-top">
+                                    <div className="flex flex-nowrap items-center justify-center gap-3">
+                                      <Money value={position.currentPrice} className="text-sm font-bold text-slate-900 dark:text-white" />
+                                      <MiniTrend from={avg} to={current} />
+                                    </div>
+                                  </td>
+                                  <td className="px-4 py-3.5 text-right align-top"><Money value={position.marketValue} className="text-sm font-bold text-slate-900 dark:text-white" /></td>
+                                  <td className="px-6 py-3.5 align-top"><AllocationBar percent={allocation} /></td>
+                                  <td className="px-6 py-3.5 align-top"><PnL amount={pnl} percent={pnlPercent} stacked /></td>
+                                  <td className="px-6 py-3.5 text-center align-top">
+                                    <button
+                                      disabled
+                                      title="Order placement isn't wired up yet"
+                                      className="cursor-not-allowed rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-600"
+                                    >
+                                      Trade
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
+              </Panel>
+            </>
+          )}
+        </div>
+      )}
+    </AppShell>
+  );
+}
+
+export function WatchlistsPage() {
+  usePageTitle("Watchlists");
+  const nav = useNavigate();
+  const [items, setItems] = useState<Watchlist[]>([]);
+  const [name, setName] = useState("");
+  const [symbols, setSymbols] = useState("");
+  const [error, setError] = useState("");
+  const [creating, setCreating] = useState(false);
+  const { push } = useToast();
+
+  const load = () => accounts.watchlists().then(setItems).catch(e => setError(errorText(e)));
+  useEffect(() => { void load(); }, []);
+
+  const create = async () => {
+    setCreating(true);
+    try {
+      const result: any = await accounts.createWatchlist(name, symbols.split(",").map(x => x.trim()).filter(Boolean));
+      nav(`/watchlists/${result.watchlist.watchlistId}`);
+    } catch (e) { push("error", errorText(e)); setCreating(false); }
+  };
+
+  const removeWatchlist = (id: string, watchlistName: string) =>
+    accounts.deleteWatchlist(id)
+      .then(() => { load(); push("success", `Deleted "${watchlistName}".`); })
+      .catch(e => push("error", errorText(e)));
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Signal watchlists</h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Manage asset groups tracked by your automated signal engine.</p>
+        </div>
+
+        {error && <ErrorPanel message={error} />}
+
+        <Panel className="p-6">
+          <h2 className="mb-4 text-sm font-bold text-slate-900 dark:text-white">Create new watchlist</h2>
+          <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-12">
+            <div className="md:col-span-4">
+              <TextField label="Watchlist name" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. High Volatility Tech" />
+            </div>
+            <div className="md:col-span-6">
+              <TextField label="Tickers (comma-separated)" value={symbols} onChange={e => setSymbols(e.target.value)} placeholder="AAPL, NVDA, TSLA, AMD" />
+            </div>
+            <div className="md:col-span-2">
+              <PrimaryButton className="w-full py-2.5" onClick={create} disabled={creating || !name.trim()}>
+                {creating ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+                {creating ? "Creating…" : "Add list"}
+              </PrimaryButton>
+            </div>
+          </div>
+        </Panel>
+
+        {items.length === 0 ? (
+          <Panel><EmptyState icon={ListChecks} title="No watchlists yet." subtitle="Create one above to start tracking tickers." /></Panel>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+            {items.map((item, index) => {
+              const Icon = watchlistIcons[index % watchlistIcons.length];
+              const hasActive = item.entries.some(e => e.active);
+              return (
+                <div key={item.watchlist.watchlistId} className="rounded-2xl border border-slate-200/90 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3 dark:border-slate-800">
+                    <Link to={`/watchlists/${item.watchlist.watchlistId}`} className="flex items-center space-x-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/20 dark:text-indigo-400">
+                        <Icon size={16} />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-slate-900 hover:text-indigo-600 dark:text-white dark:hover:text-indigo-400">{item.watchlist.name}</h3>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">{item.entries.length} symbol{item.entries.length === 1 ? "" : "s"} monitored</span>
+                      </div>
+                    </Link>
+                    <span
+                      className={`rounded-md border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                        hasActive
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400"
+                          : "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+                      }`}
+                    >
+                      {hasActive ? "Active scan" : "Standby"}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {item.entries.length === 0
+                      ? <span className="text-xs text-slate-500">No symbols yet.</span>
+                      : item.entries.map(entry => <TickerPill key={entry.ticker} ticker={entry.ticker} active={entry.active} />)}
+                  </div>
+
+                  <div className="mt-5 flex items-center justify-end gap-4 border-t border-slate-100 pt-3 text-xs font-semibold dark:border-slate-800">
+                    <Link to={`/watchlists/${item.watchlist.watchlistId}`} className="text-slate-600 transition hover:text-indigo-600 dark:text-slate-300 dark:hover:text-white">Manage</Link>
+                    <button
+                      className="text-rose-600 transition hover:text-rose-700 dark:text-rose-400"
+                      onClick={() => removeWatchlist(item.watchlist.watchlistId, item.watchlist.name)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </AppShell>
+  );
+}
+
+export function WatchlistDetailPage() {
+  const { watchlistId = "" } = useParams();
+  const nav = useNavigate();
+  const [data, setData] = useState<Watchlist>();
+  const [ticker, setTicker] = useState("");
+  const [error, setError] = useState("");
+  const [adding, setAdding] = useState(false);
+  const { push } = useToast();
+  usePageTitle(data?.watchlist.name ?? "Watchlist");
+
+  const load = () => accounts.watchlist(watchlistId).then(setData).catch(e => setError(errorText(e)));
+  useEffect(() => { void load(); }, [watchlistId]);
+
+  if (!data) return <AppShell>{error ? <ErrorPanel message={error} /> : <Loading />}</AppShell>;
+
+  const addTicker = async () => {
+    if (!ticker.trim()) return;
+    const symbol = ticker.trim().toUpperCase();
+    setAdding(true);
+    try { await accounts.addTicker(watchlistId, symbol); setTicker(""); await load(); push("success", `Added ${symbol}.`); }
+    catch (e) { push("error", errorText(e)); }
+    finally { setAdding(false); }
+  };
+
+  const toggleTicker = (entrySymbol: string, nextActive: boolean) =>
+    accounts.toggleTicker(watchlistId, entrySymbol, nextActive)
+      .then(() => { load(); push("success", `${entrySymbol} ${nextActive ? "activated" : "deactivated"}.`); })
+      .catch(e => push("error", errorText(e)));
+
+  const removeTicker = (entrySymbol: string) =>
+    accounts.removeTicker(watchlistId, entrySymbol)
+      .then(() => { load(); push("success", `Removed ${entrySymbol}.`); })
+      .catch(e => push("error", errorText(e)));
+
+  const deleteWatchlist = () =>
+    accounts.deleteWatchlist(watchlistId)
+      .then(() => { push("success", `Deleted "${data.watchlist.name}".`); nav("/watchlists"); })
+      .catch(e => push("error", errorText(e)));
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <Link to="/watchlists" className="inline-flex items-center gap-1.5 text-sm text-slate-500 transition hover:text-slate-900 dark:text-slate-400 dark:hover:text-white">
+              <ArrowLeft size={14} /> Watchlists
+            </Link>
+            <h1 className="mt-1 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">{data.watchlist.name}</h1>
+          </div>
+          <DangerButton className="self-start sm:self-auto" onClick={deleteWatchlist}>
+            <Trash2 size={14} /> Delete watchlist
+          </DangerButton>
+        </div>
+
+        {error && <ErrorPanel message={error} />}
+
+        <Panel className="p-6">
+          <div className="grid grid-cols-1 items-end gap-4 sm:grid-cols-[1fr_auto]">
+            <TextField label="Add symbol" placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value)} />
+            <PrimaryButton onClick={addTicker} disabled={adding || !ticker.trim()}>
+              {adding ? <RefreshCw size={14} className="animate-spin" /> : <Plus size={14} />}
+              {adding ? "Adding…" : "Add symbol"}
+            </PrimaryButton>
+          </div>
+        </Panel>
+
+        <Panel className="overflow-hidden">
+          {data.entries.length === 0 ? (
+            <EmptyState icon={Inbox} title="No symbols yet." subtitle="Add a ticker above to start tracking it." />
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {data.entries.map(entry => (
+                <li key={entry.ticker} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex items-center gap-3">
+                    <StockLogo symbol={entry.ticker} />
+                    <span className="font-bold text-slate-900 dark:text-white">{entry.ticker}</span>
+                    <TickerPill ticker={entry.active ? "ACTIVE" : "INACTIVE"} active={entry.active} />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <GhostButton onClick={() => toggleTicker(entry.ticker, !entry.active)}>
+                      <Power size={14} /> {entry.active ? "Deactivate" : "Activate"}
+                    </GhostButton>
+                    <DangerButton onClick={() => removeTicker(entry.ticker)}>
+                      <Trash2 size={14} /> Remove
+                    </DangerButton>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </div>
+    </AppShell>
+  );
+}
+
+export function NotFoundPage() {
+  usePageTitle("Page not found");
+  return (
+    <AppShell>
+      <Panel className="flex flex-col items-center gap-3 px-5 py-16 text-center">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Page not found</h1>
+        <Link to="/dashboard" className="text-sm font-semibold text-indigo-600 transition hover:text-indigo-500 dark:text-indigo-400">Return to dashboard</Link>
+      </Panel>
+    </AppShell>
+  );
+}
