@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ArrowDownRight, ArrowUpRight, ChevronUp, Loader2, Menu, Moon, Sun, TrendingUp, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Sun, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Freshness } from "../api/types";
 import { useConnection } from "../state/connection";
@@ -68,24 +68,7 @@ export function Logo() {
   );
 }
 
-function TabLink({ to, children, onClick, mobile = false }: { to: string; children: React.ReactNode; onClick?: () => void; mobile?: boolean }) {
-  if (mobile) {
-    return (
-      <NavLink
-        to={to}
-        onClick={onClick}
-        className={({ isActive }) =>
-          `block touch-manipulation rounded-lg px-3 py-2.5 text-sm font-semibold transition-colors ${
-            isActive
-              ? "bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-400"
-              : "text-slate-600 active:bg-slate-100 dark:text-slate-300 dark:active:bg-slate-800"
-          }`
-        }
-      >
-        {children}
-      </NavLink>
-    );
-  }
+function TabLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
     <NavLink
       to={to}
@@ -99,6 +82,40 @@ function TabLink({ to, children, onClick, mobile = false }: { to: string; childr
     >
       {children}
     </NavLink>
+  );
+}
+
+const bottomTabs = [
+  { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/watchlists", label: "Watchlists", icon: ListChecks },
+];
+
+// Persistent bottom tab bar for mobile — one tap to switch, no menu to open first.
+function BottomTabBar() {
+  return (
+    <nav
+      className="fixed inset-x-0 bottom-0 z-50 flex border-t border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 md:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      {bottomTabs.map(({ to, label, icon: Icon }) => (
+        <NavLink
+          key={to}
+          to={to}
+          className={({ isActive }) =>
+            `flex flex-1 touch-manipulation flex-col items-center gap-1 py-2.5 text-[11px] font-semibold transition-colors ${
+              isActive ? "text-indigo-600 dark:text-indigo-400" : "text-slate-500 active:text-slate-700 dark:text-slate-400 dark:active:text-slate-200"
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Icon size={20} strokeWidth={isActive ? 2.5 : 2} />
+              {label}
+            </>
+          )}
+        </NavLink>
+      ))}
+    </nav>
   );
 }
 
@@ -135,11 +152,10 @@ function ThemeToggle() {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
       <div className="pointer-events-none fixed left-1/2 top-0 -z-10 h-64 w-full max-w-7xl -translate-x-1/2 bg-gradient-to-b from-indigo-500/10 via-blue-500/5 to-transparent blur-3xl" />
-      <header className="sticky top-0 z-50 border-b border-slate-200/80 bg-white/90 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-900/90">
+      <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-4 md:space-x-8">
             <NavLink to="/dashboard" className="flex items-center space-x-2.5">
@@ -155,25 +171,23 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </nav>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
-            <ConnectionBadge className="hidden md:flex" />
+            <ConnectionBadge />
             <ThemeToggle />
-            <button
-              onClick={() => setMenuOpen(o => !o)}
-              className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white dark:active:bg-slate-800 md:hidden"
-            >
-              {menuOpen ? <X size={16} /> : <Menu size={16} />}
-            </button>
           </div>
         </div>
-        {menuOpen && (
-          <div className="space-y-2 border-t border-slate-200/80 bg-white px-4 py-3 dark:border-slate-800 dark:bg-slate-900 md:hidden">
-            <TabLink to="/dashboard" mobile onClick={() => setMenuOpen(false)}>Dashboard</TabLink>
-            <TabLink to="/watchlists" mobile onClick={() => setMenuOpen(false)}>Watchlists</TabLink>
-            <ConnectionBadge className="mt-1" />
-          </div>
-        )}
       </header>
-      <main className="mx-auto max-w-7xl px-4 py-8 sm:px-6">{children}</main>
+      <main className="mx-auto max-w-7xl px-4 pt-8 sm:px-6">{children}</main>
+      <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 md:pb-8">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs sm:flex-row sm:px-6">
+          <div className="flex items-center gap-2">
+            <Logo />
+            <span className="font-bold text-indigo-900 dark:text-white">Tradify</span>
+            <span className="text-indigo-700/70 dark:text-indigo-300/70">· Automated paper trading</span>
+          </div>
+          <span className="text-indigo-700/70 dark:text-indigo-300/70">Simulated data via Alpaca Paper Trading — no real funds involved</span>
+        </div>
+      </footer>
+      <BottomTabBar />
     </div>
   );
 }
@@ -365,59 +379,38 @@ export function StockLogo({ symbol, size = 28 }: { symbol: string; size?: number
   );
 }
 
-// Honest two-point trend line from average entry price to current price — no fabricated history.
-export function MiniTrend({ from, to }: { from?: number; to?: number }) {
-  if (from == null || to == null || !isFinite(from) || !isFinite(to) || from <= 0) return null;
-  const positive = to >= from;
-  const w = 48, h = 16, pad = 3;
-  const min = Math.min(from, to), max = Math.max(from, to);
-  const range = max - min || max * 0.02 || 1;
-  const yFor = (v: number) => h - pad - ((v - min) / range) * (h - pad * 2);
-  const y0 = yFor(from), y1 = yFor(to);
-  const color = positive ? "#10b981" : "#f43f5e";
-  const gradientId = `trend-${positive ? "up" : "down"}-${Math.round(y0)}-${Math.round(y1)}`;
+export function AllocationBar({ percent, compact = false, align = "left" }: { percent: number; compact?: boolean; align?: "left" | "right" }) {
   return (
-    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} className="overflow-visible" aria-hidden>
-      <defs>
-        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d={`M0,${y0} L${w},${y1} L${w},${h} L0,${h} Z`} fill={`url(#${gradientId})`} />
-      <line x1={0} y1={y0} x2={w} y2={y1} stroke={color} strokeWidth={1.75} strokeLinecap="round" />
-      <circle cx={w} cy={y1} r={2} fill={color} />
-    </svg>
-  );
-}
-
-export function AllocationBar({ percent }: { percent: number }) {
-  return (
-    <div className="flex items-center space-x-2">
-      <div className="h-1.5 w-20 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+    <div className={`flex w-full items-center gap-2 ${align === "right" ? "justify-end" : ""}`}>
+      <div className={`h-1.5 ${compact ? "w-8" : "w-16"} shrink-0 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800`}>
         <div className="h-full rounded-full bg-indigo-600" style={{ width: `${Math.min(100, Math.max(0, percent))}%` }} />
       </div>
-      <span className="w-9 text-[11px] font-medium tabular-nums text-slate-500 dark:text-slate-400">{percent.toFixed(1)}%</span>
+      <span className={`${compact ? "w-8" : "w-10"} shrink-0 text-right text-xs tabular-nums text-slate-500 dark:text-slate-400`}>{percent.toFixed(1)}%</span>
     </div>
   );
 }
 
 export interface SortState<K extends string> { key: K; dir: "asc" | "desc"; }
 
-export function SortableTh<K extends string>({ label, sortKey, sort, onSort, align = "left" }: {
-  label: string; sortKey: K; sort: SortState<K>; onSort: (key: K) => void; align?: "left" | "right" | "center";
+export function SortableTh<K extends string>({ label, sortKey, sort, onSort, align = "left", padding = "px-3 py-3" }: {
+  label: string; sortKey: K; sort: SortState<K>; onSort: (key: K) => void; align?: "left" | "right" | "center"; padding?: string;
 }) {
   const active = sort.key === sortKey;
   const alignClass = align === "right" ? "text-right" : align === "center" ? "text-center" : "text-left";
   const justifyClass = align === "right" ? "justify-end" : align === "center" ? "justify-center" : "justify-start";
   return (
-    <th className={`px-4 py-3 ${alignClass}`}>
+    <th className={`${padding} align-bottom text-[11px] font-bold uppercase tracking-wider text-slate-400 ${alignClass}`}>
       <button
         onClick={() => onSort(sortKey)}
-        className={`inline-flex w-full items-center gap-1 transition-colors hover:text-slate-700 dark:hover:text-slate-200 ${justifyClass} ${active ? "text-slate-700 dark:text-slate-200" : ""}`}
+        className={`inline-flex w-full items-start gap-1 whitespace-nowrap uppercase leading-tight tracking-wider transition-colors hover:text-slate-700 dark:hover:text-slate-200 ${justifyClass} ${active ? "text-slate-700 dark:text-slate-200" : ""}`}
       >
-        {label}
-        <ChevronUp size={12} className={`transition-transform ${active ? "opacity-100" : "opacity-0"} ${active && sort.dir === "desc" ? "rotate-180" : ""}`} />
+        {align === "right" && (
+          <ChevronUp size={12} className={`mt-0.5 shrink-0 transition-transform ${active ? "opacity-100" : "opacity-0"} ${active && sort.dir === "desc" ? "rotate-180" : ""}`} />
+        )}
+        <span>{label}</span>
+        {align !== "right" && (
+          <ChevronUp size={12} className={`mt-0.5 shrink-0 transition-transform ${active ? "opacity-100" : "opacity-0"} ${active && sort.dir === "desc" ? "rotate-180" : ""}`} />
+        )}
       </button>
     </th>
   );

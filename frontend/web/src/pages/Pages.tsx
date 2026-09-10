@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
-  Activity, ArrowLeft, Bell, Download, Eye, Inbox, ListChecks, Plus, Power,
+  Activity, ArrowLeft, Bell, ChevronLeft, ChevronRight, Download, Eye, Inbox, ListChecks, Plus, Power,
   RefreshCw, Search, Star, Trash2, TrendingUp, Wallet,
 } from "lucide-react";
 import { accounts, errorText } from "../api/accountsClient";
@@ -11,7 +11,7 @@ import { useConnection } from "../state/connection";
 import { useToast } from "../state/toast";
 import {
   AllocationBar, AppShell, DangerButton, DashboardSkeleton, DateTime, EmptyState, ErrorPanel, freshnessMeta,
-  GhostButton, Loading, Money, MetricCard, MiniTrend, Panel, PnL, PrimaryButton,
+  GhostButton, Loading, Money, MetricCard, Panel, PnL, PrimaryButton,
   SecondaryButton, SortableTh, StockLogo, TextField, TickerPill,
 } from "../components/ui";
 import type { SortState } from "../components/ui";
@@ -27,6 +27,14 @@ const companyNames: Record<string, string> = {
 const watchlistIcons = [ListChecks, Eye, Star, Bell];
 
 type PositionSortKey = "symbol" | "quantity" | "avgPrice" | "currentPrice" | "marketValue" | "pnl";
+
+// The backend returns costBasis directly per position; only derive it as a fallback
+// (e.g. for demo/mock data) so percentage math stays anchored to the real field when present.
+function positionCostBasis(p: Position): number {
+  const real = Number(p.costBasis);
+  if (real) return real;
+  return (Number(p.averageEntryPrice) || 0) * (Number(p.quantity) || 0);
+}
 
 function positionSortValue(p: Position, key: PositionSortKey): string | number {
   switch (key) {
@@ -62,6 +70,8 @@ export function DashboardPage() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<"all" | "profit" | "loss">("all");
   const [sort, setSort] = useState<SortState<PositionSortKey>>({ key: "marketValue", dir: "desc" });
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
   const { setFreshness } = useConnection();
   const { push } = useToast();
 
@@ -81,10 +91,12 @@ export function DashboardPage() {
 
   const onSort = (key: PositionSortKey) => setSort(s => (s.key === key ? { key, dir: s.dir === "asc" ? "desc" : "asc" } : { key, dir: key === "symbol" ? "asc" : "desc" }));
 
+  useEffect(() => { setPage(1); }, [query, filter, sort]);
+
   const positions = data?.positions ?? [];
   const totalPnl = positions.reduce((sum, p) => sum + (Number(p.unrealizedPnl) || 0), 0);
   const totalMarketValue = positions.reduce((sum, p) => sum + (Number(p.marketValue) || 0), 0);
-  const costBasis = positions.reduce((sum, p) => sum + (Number(p.averageEntryPrice) || 0) * (Number(p.quantity) || 0), 0);
+  const costBasis = positions.reduce((sum, p) => sum + positionCostBasis(p), 0);
   const totalPnlPercent = costBasis ? (totalPnl / costBasis) * 100 : undefined;
   const winners = positions.filter(p => Number(p.unrealizedPnl) > 0);
   const losers = positions.filter(p => Number(p.unrealizedPnl) < 0);
@@ -93,7 +105,7 @@ export function DashboardPage() {
     undefined,
   );
   const topGainerPercent = topGainer
-    ? ((Number(topGainer.unrealizedPnl) || 0) / ((Number(topGainer.averageEntryPrice) || 1) * (Number(topGainer.quantity) || 1))) * 100
+    ? ((Number(topGainer.unrealizedPnl) || 0) / (positionCostBasis(topGainer) || 1)) * 100
     : undefined;
 
   const visiblePositions = useMemo(() => {
@@ -113,9 +125,19 @@ export function DashboardPage() {
     });
   }, [positions, query, filter, sort]);
 
+  const totalPages = Math.max(1, Math.ceil(visiblePositions.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const pageStart = (currentPage - 1) * pageSize;
+  const pagedPositions = visiblePositions.slice(pageStart, pageStart + pageSize);
+
+  // Prefer the backend's own longMarketValue when it sends one; fall back to
+  // equity - cash only for data sources (like the demo fallback) that don't.
+  const longMarketValue = Number(data?.account?.longMarketValue);
   const equity = Number(data?.account?.equity);
   const cash = Number(data?.account?.cash);
-  const inPositions = !Number.isNaN(equity) && !Number.isNaN(cash) ? equity - cash : undefined;
+  const inPositions = !Number.isNaN(longMarketValue) && longMarketValue
+    ? longMarketValue
+    : (!Number.isNaN(equity) && !Number.isNaN(cash) ? equity - cash : undefined);
 
   return (
     <AppShell>
@@ -131,6 +153,11 @@ export function DashboardPage() {
                   <span>Last synchronized <DateTime value={data.asOf} /></span>
                   <span>•</span>
                   <span className={`font-medium ${freshnessMeta[data.freshness].text}`}>{freshnessMeta[data.freshness].label}</span>
+                  {data.freshness === "UNAVAILABLE" && (
+                    <button onClick={() => void load()} className="font-semibold text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
+                      Retry connecting
+                    </button>
+                  )}
                 </div>
               ) : (
                 <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live synchronized metrics from your automated paper execution bot.</p>
@@ -243,11 +270,12 @@ export function DashboardPage() {
                 ) : visiblePositions.length === 0 ? (
                   <EmptyState icon={Search} title="No matching positions." subtitle="Try a different search or filter." />
                 ) : (() => {
-                  const rows = visiblePositions.map(position => {
+                  const rows = pagedPositions.map(position => {
                     const avg = Number(position.averageEntryPrice);
                     const current = Number(position.currentPrice);
                     const pnl = Number(position.unrealizedPnl);
-                    const pnlPercent = avg ? ((current - avg) / avg) * 100 : undefined;
+                    const rowCostBasis = positionCostBasis(position);
+                    const pnlPercent = rowCostBasis ? (pnl / rowCostBasis) * 100 : undefined;
                     const marketValue = Number(position.marketValue) || 0;
                     const allocation = totalMarketValue ? (marketValue / totalMarketValue) * 100 : 0;
                     const companyName = companyNames[position.symbol];
@@ -255,11 +283,12 @@ export function DashboardPage() {
                   });
                   return (
                     <>
-                      {/* Mobile: stacked cards — a scrolled-down table reads poorly on narrow screens */}
-                      <ul className="divide-y divide-slate-100 dark:divide-slate-800 sm:hidden">
-                        {rows.map(({ position, pnl, pnlPercent, allocation, companyName }) => (
+                      {/* Below md: stacked cards — a 9-column table has no room to breathe this narrow */}
+                      <ul className="divide-y divide-slate-100 dark:divide-slate-800 lg:hidden">
+                        {rows.map(({ position, pnl, pnlPercent, allocation, companyName }, index) => (
                           <li key={position.symbol} className="flex flex-col gap-3 px-5 py-4">
                             <div className="flex items-start gap-3">
+                              <span className="w-4 shrink-0 pt-1.5 text-right text-xs font-medium tabular-nums text-slate-400">{pageStart + index + 1}</span>
                               <StockLogo symbol={position.symbol} />
                               <div className="min-w-0 flex-1">
                                 <div className="text-sm font-bold leading-tight text-slate-900 dark:text-white">{position.symbol}</div>
@@ -296,61 +325,103 @@ export function DashboardPage() {
                         ))}
                       </ul>
 
-                      {/* Tablet and up: full data table */}
-                      <div className="relative hidden sm:block">
-                        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-white to-transparent dark:from-slate-900 md:hidden" />
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-left text-xs">
-                            <thead>
-                              <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-800/40">
-                                <SortableTh label="Asset" sortKey="symbol" sort={sort} onSort={onSort} />
-                                <SortableTh label="Shares" sortKey="quantity" sort={sort} onSort={onSort} align="center" />
-                                <SortableTh label="Avg price" sortKey="avgPrice" sort={sort} onSort={onSort} align="right" />
-                                <SortableTh label="Market price & trend" sortKey="currentPrice" sort={sort} onSort={onSort} align="center" />
-                                <SortableTh label="Market value" sortKey="marketValue" sort={sort} onSort={onSort} align="right" />
-                                <th className="px-6 py-3">Allocation</th>
-                                <SortableTh label="Unrealized P&L" sortKey="pnl" sort={sort} onSort={onSort} align="right" />
-                                <th className="px-6 py-3 text-center">Action</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                              {rows.map(({ position, avg, current, pnl, pnlPercent, allocation, companyName }) => (
-                                <tr key={position.symbol} className="transition hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
-                                  <td className="px-6 py-3.5 align-top">
-                                    <div className="flex items-start gap-3">
-                                      <StockLogo symbol={position.symbol} />
-                                      <div className="min-w-0">
-                                        <div className="text-sm font-bold leading-tight text-slate-900 dark:text-white">{position.symbol}</div>
-                                        {companyName && <div className="mt-0.5 truncate text-xs leading-tight text-slate-500 dark:text-slate-400">{companyName}</div>}
-                                      </div>
+                      {/* md and up: full data table, sized to always fit — no horizontal scroll */}
+                      <div className="hidden lg:block">
+                        <table className="w-full table-fixed text-left text-xs">
+                          <colgroup>
+                            <col className="w-[4%]" />
+                            <col className="w-[12%]" />
+                            <col className="w-[8%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[10%]" />
+                            <col className="w-[16%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[15%]" />
+                            <col className="w-[10%]" />
+                          </colgroup>
+                          <thead>
+                            <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-800/40">
+                              <th className="px-3 py-3 text-center align-bottom">#</th>
+                              <SortableTh label="Asset" sortKey="symbol" sort={sort} onSort={onSort} padding="pl-3 pr-2 py-3" />
+                              <SortableTh label="Shares" sortKey="quantity" sort={sort} onSort={onSort} align="right" padding="pl-3 pr-4 py-3" />
+                              <SortableTh label="Avg price" sortKey="avgPrice" sort={sort} onSort={onSort} align="right" padding="pl-3 pr-4 py-3" />
+                              <SortableTh label="Current" sortKey="currentPrice" sort={sort} onSort={onSort} align="right" padding="pl-3 pr-4 py-3" />
+                              <SortableTh label="Market value" sortKey="marketValue" sort={sort} onSort={onSort} align="right" padding="pl-3 pr-6 py-3" />
+                              <th className="min-w-[140px] px-4 py-3 text-right align-bottom text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-tight">Allocation</th>
+                              <SortableTh label="Unrealized P&L" sortKey="pnl" sort={sort} onSort={onSort} align="right" padding="pl-3 pr-4 py-3" />
+                              <th className="px-3 py-3 text-center align-bottom text-[11px] font-bold uppercase tracking-wider text-slate-400 leading-tight">Action</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                            {rows.map(({ position, avg, current, pnl, pnlPercent, allocation }, index) => {
+                              const priceColor = current === avg ? "text-slate-900 dark:text-white" : current > avg ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400";
+                              return (
+                                <tr key={position.symbol} className="h-14 transition hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                                  <td className="px-3 py-3.5 align-middle text-center tabular-nums text-slate-400">{pageStart + index + 1}</td>
+                                  <td className="pl-3 pr-2 py-3.5 align-middle text-left">
+                                    <div className="flex items-center gap-2.5">
+                                      <StockLogo symbol={position.symbol} size={26} />
+                                      <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{position.symbol}</span>
                                     </div>
                                   </td>
-                                  <td className="px-4 py-3.5 text-center align-top font-semibold tabular-nums text-slate-700 dark:text-slate-300">{position.quantity ?? "—"}</td>
-                                  <td className="px-4 py-3.5 text-right align-top"><Money value={position.averageEntryPrice} className="text-slate-500 dark:text-slate-400" /></td>
-                                  <td className="px-6 py-3.5 align-top">
-                                    <div className="flex flex-nowrap items-center justify-center gap-3">
-                                      <Money value={position.currentPrice} className="text-sm font-bold text-slate-900 dark:text-white" />
-                                      <MiniTrend from={avg} to={current} />
-                                    </div>
-                                  </td>
-                                  <td className="px-4 py-3.5 text-right align-top"><Money value={position.marketValue} className="text-sm font-bold text-slate-900 dark:text-white" /></td>
-                                  <td className="px-6 py-3.5 align-top"><AllocationBar percent={allocation} /></td>
-                                  <td className="px-6 py-3.5 align-top"><PnL amount={pnl} percent={pnlPercent} stacked /></td>
-                                  <td className="px-6 py-3.5 text-center align-top">
+                                  <td className="py-3.5 pl-3 pr-4 align-middle text-right font-semibold tabular-nums text-slate-700 dark:text-slate-300">{position.quantity ?? "—"}</td>
+                                  <td className="py-3.5 pl-3 pr-4 align-middle text-right whitespace-nowrap"><Money value={position.averageEntryPrice} className="text-slate-500 dark:text-slate-400" /></td>
+                                  <td className="py-3.5 pl-3 pr-4 align-middle text-right whitespace-nowrap"><Money value={position.currentPrice} className={`font-bold ${priceColor}`} /></td>
+                                  <td className="py-3.5 pl-3 pr-6 align-middle text-right whitespace-nowrap"><Money value={position.marketValue} className="font-bold text-slate-900 dark:text-white" /></td>
+                                  <td className="min-w-[140px] px-4 py-3.5 align-middle"><AllocationBar percent={allocation} align="right" /></td>
+                                  <td className="py-3.5 pl-3 pr-4 align-middle text-right"><PnL amount={pnl} percent={pnlPercent} stacked /></td>
+                                  <td className="px-3 py-3.5 align-middle text-center">
                                     <button
                                       disabled
                                       title="Order placement isn't wired up yet"
-                                      className="cursor-not-allowed rounded-md bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-600"
+                                      className="cursor-not-allowed rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-600"
                                     >
                                       Trade
                                     </button>
                                   </td>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                              );
+                            })}
+                          </tbody>
+                        </table>
                       </div>
+
+                      {totalPages > 1 && (
+                        <div className="flex items-center justify-between gap-3 border-t border-slate-200/80 px-5 py-3 dark:border-slate-800">
+                          <span className="text-xs text-slate-500 dark:text-slate-400">
+                            Showing {pageStart + 1}–{Math.min(pageStart + pageSize, visiblePositions.length)} of {visiblePositions.length}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <button
+                              onClick={() => setPage(p => Math.max(1, p - 1))}
+                              disabled={currentPage === 1}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            >
+                              <ChevronLeft size={14} />
+                            </button>
+                            {Array.from({ length: totalPages }, (_, i) => i + 1).map(p => (
+                              <button
+                                key={p}
+                                onClick={() => setPage(p)}
+                                className={`flex h-7 w-7 items-center justify-center rounded-md text-xs font-semibold tabular-nums transition ${
+                                  p === currentPage
+                                    ? "bg-indigo-600 text-white"
+                                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                              disabled={currentPage === totalPages}
+                              className="flex h-7 w-7 items-center justify-center rounded-md border border-slate-200 text-slate-500 transition hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800"
+                            >
+                              <ChevronRight size={14} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </>
                   );
                 })()}
@@ -367,13 +438,14 @@ export function WatchlistsPage() {
   usePageTitle("Watchlists");
   const nav = useNavigate();
   const [items, setItems] = useState<Watchlist[]>([]);
+  const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
   const [symbols, setSymbols] = useState("");
   const [error, setError] = useState("");
   const [creating, setCreating] = useState(false);
   const { push } = useToast();
 
-  const load = () => accounts.watchlists().then(setItems).catch(e => setError(errorText(e)));
+  const load = () => { setLoading(true); return accounts.watchlists().then(setItems).catch(e => setError(errorText(e))).finally(() => setLoading(false)); };
   useEffect(() => { void load(); }, []);
 
   const create = async () => {
@@ -417,7 +489,9 @@ export function WatchlistsPage() {
           </div>
         </Panel>
 
-        {items.length === 0 ? (
+        {loading ? (
+          <Loading />
+        ) : items.length === 0 ? (
           <Panel><EmptyState icon={ListChecks} title="No watchlists yet." subtitle="Create one above to start tracking tickers." /></Panel>
         ) : (
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
