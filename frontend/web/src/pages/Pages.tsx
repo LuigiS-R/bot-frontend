@@ -318,8 +318,8 @@ export function DashboardPage() {
                             </div>
 
                             <div className="flex items-center gap-2">
-                              <AllocationBar percent={allocation} />
-                              <span className="text-[11px] text-slate-400">of portfolio</span>
+                              <AllocationBar percent={allocation} className="w-auto" />
+                              <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400">of portfolio</span>
                             </div>
                           </li>
                         ))}
