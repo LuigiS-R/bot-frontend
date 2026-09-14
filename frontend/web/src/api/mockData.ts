@@ -1,4 +1,4 @@
-import type { Dashboard, Watchlist } from "./types";
+import type { Dashboard, Order, Watchlist } from "./types";
 
 export const mockDashboard: Dashboard = {
   account: {
@@ -20,6 +20,13 @@ export const mockDashboard: Dashboard = {
   asOf: new Date().toISOString(),
   freshness: "UNAVAILABLE",
 };
+
+export const mockOrders: Order[] = [
+  { orderId: "demo-order-1", symbol: "AAPL", side: "BUY", quantity: "25", filledQuantity: "25", orderType: "LIMIT", limitPrice: "182.30", status: "FILLED", reason: "Strategy Engine: UP prediction, confidence 0.81", createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString() },
+  { orderId: "demo-order-2", symbol: "NVDA", side: "BUY", quantity: "10", filledQuantity: "10", orderType: "LIMIT", limitPrice: "118.20", status: "FILLED", reason: "Strategy Engine: UP prediction, confidence 0.77", createdAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(), updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString() },
+  { orderId: "demo-order-3", symbol: "TSLA", side: "SELL", quantity: "5", filledQuantity: "0", orderType: "LIMIT", limitPrice: "241.00", status: "PENDING", reason: "Manual order", createdAt: new Date(Date.now() - 1000 * 60 * 12).toISOString(), updatedAt: new Date(Date.now() - 1000 * 60 * 12).toISOString() },
+  { orderId: "demo-order-4", symbol: "MSFT", side: "BUY", quantity: "8", filledQuantity: "0", orderType: "LIMIT", limitPrice: "402.50", status: "REJECTED", reason: "Insufficient buying power", createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(), updatedAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString() },
+];
 
 export const mockWatchlists: Watchlist[] = [
   {

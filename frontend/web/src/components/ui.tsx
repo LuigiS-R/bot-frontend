@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ArrowDownRight, ArrowUpRight, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Sun, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Radio, Receipt, Sun, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import type { Freshness } from "../api/types";
 import { useConnection } from "../state/connection";
@@ -87,7 +87,10 @@ function TabLink({ to, children }: { to: string; children: React.ReactNode }) {
 
 const bottomTabs = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { to: "/orders", label: "Orders", icon: Receipt },
   { to: "/watchlists", label: "Watchlists", icon: ListChecks },
+  { to: "/signals", label: "Signals", icon: Radio },
+  { to: "/results", label: "Results", icon: BarChart3 },
 ];
 
 // Persistent bottom tab bar for mobile — one tap to switch, no menu to open first.
@@ -167,7 +170,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </NavLink>
             <nav className="hidden items-center rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800 md:flex">
               <TabLink to="/dashboard">Dashboard</TabLink>
+              <TabLink to="/orders">Orders</TabLink>
               <TabLink to="/watchlists">Watchlists</TabLink>
+              <TabLink to="/signals">Signals</TabLink>
+              <TabLink to="/results">Results</TabLink>
             </nav>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
@@ -418,6 +424,20 @@ export function SortableTh<K extends string>({ label, sortKey, sort, onSort, ali
 
 export function Panel({ className = "", children }: { className?: string; children: React.ReactNode }) {
   return <div className={`rounded-xl border border-slate-200/90 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900 ${className}`}>{children}</div>;
+}
+
+const orderStatusStyles: Record<string, string> = {
+  FILLED: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-400",
+  PARTIALLY_FILLED: "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400",
+  PENDING: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400",
+  REJECTED: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-500/20 dark:bg-rose-500/10 dark:text-rose-400",
+  CANCELLED: "border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400",
+};
+
+export function OrderStatusBadge({ status }: { status?: string }) {
+  const key = (status ?? "").toUpperCase();
+  const style = orderStatusStyles[key] ?? orderStatusStyles.CANCELLED;
+  return <span className={`inline-flex rounded-md border px-2 py-0.5 text-[11px] font-bold uppercase ${style}`}>{status ?? "UNKNOWN"}</span>;
 }
 
 export function EmptyState({ icon: Icon, title, subtitle }: { icon: LucideIcon; title: string; subtitle: string }) {

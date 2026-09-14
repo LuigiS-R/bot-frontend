@@ -2,16 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   Activity, ArrowLeft, Bell, ChevronLeft, ChevronRight, Download, Eye, Inbox, ListChecks, Plus, Power,
-  RefreshCw, Search, Star, Trash2, TrendingUp, Wallet,
+  Receipt, RefreshCw, Search, Star, Trash2, TrendingUp, Wallet,
 } from "lucide-react";
 import { accounts, errorText } from "../api/accountsClient";
-import type { Dashboard, Position, Watchlist } from "../api/types";
+import type { Dashboard, Order, Position, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useConnection } from "../state/connection";
 import { useToast } from "../state/toast";
+import { OrderTicket } from "../components/OrderTicket";
+import { OrderTrace } from "../components/OrderTrace";
 import {
   AllocationBar, AppShell, DangerButton, DashboardSkeleton, DateTime, EmptyState, ErrorPanel, freshnessMeta,
-  GhostButton, Loading, Money, MetricCard, Panel, PnL, PrimaryButton,
+  GhostButton, Loading, Money, MetricCard, OrderStatusBadge, Panel, PnL, PrimaryButton,
   SecondaryButton, SortableTh, StockLogo, TextField, TickerPill,
 } from "../components/ui";
 import type { SortState } from "../components/ui";
@@ -72,6 +74,7 @@ export function DashboardPage() {
   const [sort, setSort] = useState<SortState<PositionSortKey>>({ key: "marketValue", dir: "desc" });
   const [page, setPage] = useState(1);
   const pageSize = 10;
+  const [ticket, setTicket] = useState<{ symbol: string; limitPrice?: string } | null>(null);
   const { setFreshness } = useConnection();
   const { push } = useToast();
 
@@ -320,6 +323,12 @@ export function DashboardPage() {
                             <div className="flex items-center gap-2">
                               <AllocationBar percent={allocation} className="w-auto" />
                               <span className="shrink-0 whitespace-nowrap text-[11px] text-slate-400">of portfolio</span>
+                              <button
+                                onClick={() => setTicket({ symbol: position.symbol, limitPrice: position.currentPrice })}
+                                className="ml-auto shrink-0 rounded-md bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20"
+                              >
+                                Trade
+                              </button>
                             </div>
                           </li>
                         ))}
@@ -372,9 +381,8 @@ export function DashboardPage() {
                                   <td className="py-3.5 pl-3 pr-4 align-middle text-right"><PnL amount={pnl} percent={pnlPercent} stacked /></td>
                                   <td className="px-3 py-3.5 align-middle text-center">
                                     <button
-                                      disabled
-                                      title="Order placement isn't wired up yet"
-                                      className="cursor-not-allowed rounded-md bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-400 dark:bg-slate-800 dark:text-slate-600"
+                                      onClick={() => setTicket({ symbol: position.symbol, limitPrice: position.currentPrice })}
+                                      className="rounded-md bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 transition hover:bg-indigo-100 dark:bg-indigo-500/10 dark:text-indigo-400 dark:hover:bg-indigo-500/20"
                                     >
                                       Trade
                                     </button>
@@ -430,6 +438,166 @@ export function DashboardPage() {
           )}
         </div>
       )}
+      {ticket && (
+        <OrderTicket
+          symbol={ticket.symbol}
+          defaultSide="SELL"
+          defaultLimitPrice={ticket.limitPrice}
+          onClose={() => setTicket(null)}
+          onPlaced={() => void load()}
+        />
+      )}
+    </AppShell>
+  );
+}
+
+const orderStatusFilters = ["all", "FILLED", "PENDING", "REJECTED", "CANCELLED"] as const;
+
+export function OrdersPage() {
+  usePageTitle("Orders");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<(typeof orderStatusFilters)[number]>("all");
+  const [newOrder, setNewOrder] = useState(false);
+  const [traceOrder, setTraceOrder] = useState<Order | null>(null);
+
+  const load = () => { setLoading(true); return accounts.orders().then(setOrders).catch(e => setError(errorText(e))).finally(() => setLoading(false)); };
+  useEffect(() => { void load(); }, []);
+
+  const visibleOrders = useMemo(() => {
+    return orders
+      .filter(o => !query || (o.symbol ?? "").toLowerCase().includes(query.trim().toLowerCase()))
+      .filter(o => status === "all" || (o.status ?? "").toUpperCase() === status)
+      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime());
+  }, [orders, query, status]);
+
+  return (
+    <AppShell>
+      <div className="space-y-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Order history</h1>
+            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Orders submitted by the automated bot and manual trades.</p>
+          </div>
+          <PrimaryButton onClick={() => setNewOrder(true)}>
+            <Plus size={14} /> New order
+          </PrimaryButton>
+        </div>
+
+        {error && <ErrorPanel message={error} />}
+
+        <Panel className="overflow-hidden">
+          {orders.length > 0 && (
+            <div className="flex flex-col gap-3 border-b border-slate-200/80 p-5 dark:border-slate-800 sm:flex-row sm:items-center sm:justify-between">
+              <div className="relative">
+                <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={e => setQuery(e.target.value)}
+                  placeholder="Filter ticker…"
+                  className="w-full rounded-lg border border-slate-200 bg-slate-50 py-1.5 pl-8 pr-3 text-xs text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 sm:w-44"
+                />
+              </div>
+              <div className="flex flex-wrap rounded-lg border border-slate-200 bg-slate-100 p-0.5 dark:border-slate-700 dark:bg-slate-800">
+                {orderStatusFilters.map(key => (
+                  <button
+                    key={key}
+                    onClick={() => setStatus(key)}
+                    className={`rounded-md px-2.5 py-1 text-[11px] font-bold capitalize transition ${
+                      status === key
+                        ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
+                    }`}
+                  >
+                    {key.toLowerCase().replace("_", " ")}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {loading ? (
+            <Loading />
+          ) : orders.length === 0 ? (
+            <EmptyState icon={Receipt} title="No orders yet." subtitle="Orders from the bot or from manual trades will appear here." />
+          ) : visibleOrders.length === 0 ? (
+            <EmptyState icon={Search} title="No matching orders." subtitle="Try a different search or filter." />
+          ) : (
+            <>
+              <ul className="divide-y divide-slate-100 dark:divide-slate-800 lg:hidden">
+                {visibleOrders.map(order => (
+                  <li key={order.orderId}>
+                    <button onClick={() => setTraceOrder(order)} className="flex w-full flex-col gap-2 px-5 py-4 text-left transition hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                      <div className="flex items-start gap-3">
+                        <StockLogo symbol={order.symbol ?? ""} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-bold text-slate-900 dark:text-white">{order.symbol}</span>
+                            <span className={`text-xs font-bold ${order.side === "BUY" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{order.side}</span>
+                          </div>
+                          <div className="text-xs text-slate-500 dark:text-slate-400">{order.filledQuantity ?? "0"} / {order.quantity ?? "—"} filled @ <Money value={order.limitPrice} /></div>
+                        </div>
+                        <OrderStatusBadge status={order.status} />
+                      </div>
+                      {order.reason && <p className="text-xs text-slate-500 dark:text-slate-400">{order.reason}</p>}
+                      <span className="text-[11px] text-slate-400"><DateTime value={order.createdAt} /></span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="hidden lg:block">
+                <table className="w-full table-fixed text-left text-xs">
+                  <colgroup>
+                    <col className="w-[16%]" />
+                    <col className="w-[8%]" />
+                    <col className="w-[10%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[12%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[12%]" />
+                  </colgroup>
+                  <thead>
+                    <tr className="border-b border-slate-200/80 bg-slate-50/60 text-[11px] font-bold uppercase tracking-wider text-slate-400 dark:border-slate-800 dark:bg-slate-800/40">
+                      <th className="px-4 py-3 text-left align-bottom">Asset</th>
+                      <th className="px-3 py-3 text-left align-bottom">Side</th>
+                      <th className="px-3 py-3 text-right align-bottom">Qty / Filled</th>
+                      <th className="px-3 py-3 text-right align-bottom">Limit price</th>
+                      <th className="px-3 py-3 text-center align-bottom">Status</th>
+                      <th className="px-3 py-3 text-left align-bottom">Reason</th>
+                      <th className="px-3 py-3 text-left align-bottom">Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {visibleOrders.map(order => (
+                      <tr key={order.orderId} onClick={() => setTraceOrder(order)} className="h-14 cursor-pointer transition hover:bg-slate-50/80 dark:hover:bg-slate-800/50">
+                        <td className="px-4 py-3.5 align-middle">
+                          <div className="flex items-center gap-2.5">
+                            <StockLogo symbol={order.symbol ?? ""} size={26} />
+                            <span className="truncate text-sm font-bold text-slate-900 dark:text-white">{order.symbol}</span>
+                          </div>
+                        </td>
+                        <td className={`px-3 py-3.5 align-middle text-left font-bold ${order.side === "BUY" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{order.side}</td>
+                        <td className="px-3 py-3.5 align-middle text-right tabular-nums text-slate-700 dark:text-slate-300">{order.filledQuantity ?? "0"} / {order.quantity ?? "—"}</td>
+                        <td className="px-3 py-3.5 align-middle text-right"><Money value={order.limitPrice} className="text-slate-700 dark:text-slate-300" /></td>
+                        <td className="px-3 py-3.5 align-middle text-center"><OrderStatusBadge status={order.status} /></td>
+                        <td className="truncate px-3 py-3.5 align-middle text-slate-500 dark:text-slate-400">{order.reason ?? "—"}</td>
+                        <td className="px-3 py-3.5 align-middle text-slate-500 dark:text-slate-400"><DateTime value={order.createdAt} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </Panel>
+      </div>
+      {newOrder && <OrderTicket onClose={() => setNewOrder(false)} onPlaced={() => void load()} />}
+      {traceOrder && <OrderTrace order={traceOrder} onClose={() => setTraceOrder(null)} />}
     </AppShell>
   );
 }

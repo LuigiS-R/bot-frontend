@@ -1,4 +1,5 @@
-import { mockDashboard, mockWatchlists } from "./mockData";
+import { mockDashboard, mockOrders, mockWatchlists } from "./mockData";
+import type { PlaceOrderInput } from "./types";
 
 export class ApiError extends Error { constructor(public status: number, public payload: unknown) { super(`API Error ${status}`); } }
 export const errorText = (error: any) => error?.payload?.message || error?.message || "An unexpected error occurred.";
@@ -28,7 +29,8 @@ function withFallback<T>(mock: T) {
 export const accounts = {
   dashboard: () => request("/api/v1/dashboard").catch(withFallback(mockDashboard)),
   account: () => request("/api/v1/account"),
-  orders: () => request("/api/v1/orders"),
+  orders: () => request("/api/v1/orders").catch(withFallback(mockOrders)),
+  placeOrder: (input: PlaceOrderInput) => request("/api/v1/orders", { method: "POST", body: JSON.stringify({ ...input, orderType: "LIMIT", timeInForce: "DAY" }) }),
   reconcile: () => request("/api/v1/account/reconcile", { method: "POST" }),
   watchlists: () => request("/api/v1/watchlists").catch(withFallback(mockWatchlists)),
   watchlist: (id: string) => request(`/api/v1/watchlists/${id}`).catch(withFallback(mockWatchlists.find(w => w.watchlist.watchlistId === id) ?? mockWatchlists[0])),
