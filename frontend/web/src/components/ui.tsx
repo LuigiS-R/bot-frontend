@@ -90,7 +90,7 @@ const bottomTabs = [
   { to: "/orders", label: "Orders", icon: Receipt },
   { to: "/watchlists", label: "Watchlists", icon: ListChecks },
   { to: "/signals", label: "Signals", icon: Radio },
-  { to: "/results", label: "Results", icon: BarChart3 },
+  { to: "/results", label: "Report", icon: BarChart3 },
 ];
 
 // Persistent bottom tab bar for mobile — one tap to switch, no menu to open first.
@@ -173,7 +173,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <TabLink to="/orders">Orders</TabLink>
               <TabLink to="/watchlists">Watchlists</TabLink>
               <TabLink to="/signals">Signals</TabLink>
-              <TabLink to="/results">Results</TabLink>
+              <TabLink to="/results">Report</TabLink>
             </nav>
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
@@ -338,6 +338,28 @@ export function TickerPill({ ticker, active }: { ticker: string; active: boolean
     <span className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
       <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-600"}`} />
       {ticker}
+    </span>
+  );
+}
+
+// Like TickerPill, but shows last close + day change when a live price is available.
+// Falls back to a bare ticker pill (e.g. for a ticker Alpaca doesn't recognize).
+export function TickerPriceChip({ ticker, active, price, changePercent }: { ticker: string; active: boolean; price?: number; changePercent?: number }) {
+  const hasPrice = price != null && changePercent != null;
+  const positive = (changePercent ?? 0) >= 0;
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+      <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-emerald-500" : "bg-slate-400 dark:bg-slate-600"}`} />
+      {ticker}
+      {hasPrice && (
+        <>
+          <span className="text-slate-300 dark:text-slate-600">·</span>
+          <span className="tabular-nums text-slate-600 dark:text-slate-300">${price.toFixed(2)}</span>
+          <span className={`tabular-nums ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+            {positive ? "+" : ""}{changePercent.toFixed(2)}%
+          </span>
+        </>
+      )}
     </span>
   );
 }

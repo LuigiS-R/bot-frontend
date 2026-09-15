@@ -5,6 +5,7 @@ import {
   Receipt, RefreshCw, Search, Star, Trash2, TrendingUp, Wallet,
 } from "lucide-react";
 import { accounts, errorText } from "../api/accountsClient";
+import { signals } from "../api/signalsClient";
 import type { Dashboard, Order, Position, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { useConnection } from "../state/connection";
@@ -14,9 +15,38 @@ import { OrderTrace } from "../components/OrderTrace";
 import {
   AllocationBar, AppShell, DangerButton, DashboardSkeleton, DateTime, EmptyState, ErrorPanel, freshnessMeta,
   GhostButton, Loading, Money, MetricCard, OrderStatusBadge, Panel, PnL, PrimaryButton,
-  SecondaryButton, SortableTh, StockLogo, TextField, TickerPill,
+  SecondaryButton, SortableTh, StockLogo, TextField, TickerPill, TickerPriceChip,
 } from "../components/ui";
 import type { SortState } from "../components/ui";
+
+// Fetches last close + day return for a set of tickers (via the Signals market-data
+// endpoint) so watchlists can show live price context, not just bare ticker pills.
+// Tolerant of individual failures (e.g. an invalid ticker) via allSettled.
+function usePriceMap(tickers: string[]) {
+  const [prices, setPrices] = useState<Record<string, { price: number; changePercent: number }>>({});
+  const key = Array.from(new Set(tickers)).sort().join(",");
+
+  useEffect(() => {
+    if (!key) { setPrices({}); return; }
+    let cancelled = false;
+    const list = key.split(",");
+    Promise.allSettled(list.map(t => signals.inputs(t).then(r => [t, r] as const)))
+      .then(results => {
+        if (cancelled) return;
+        const next: Record<string, { price: number; changePercent: number }> = {};
+        results.forEach(r => {
+          if (r.status === "fulfilled") {
+            const [ticker, data] = r.value;
+            next[ticker] = { price: data.features.close, changePercent: data.features.return * 100 };
+          }
+        });
+        setPrices(next);
+      });
+    return () => { cancelled = true; };
+  }, [key]);
+
+  return prices;
+}
 
 const companyNames: Record<string, string> = {
   AAPL: "Apple Inc.", NVDA: "NVIDIA Corp.", TSLA: "Tesla Inc.", MSFT: "Microsoft Corp.",
@@ -616,10 +646,22 @@ export function WatchlistsPage() {
   const load = () => { setLoading(true); return accounts.watchlists().then(setItems).catch(e => setError(errorText(e))).finally(() => setLoading(false)); };
   useEffect(() => { void load(); }, []);
 
+  const allTickers = useMemo(() => items.flatMap(w => w.entries.map(e => e.ticker)), [items]);
+  const prices = usePriceMap(allTickers);
+
   const create = async () => {
+    const symbolList = Array.from(new Set(symbols.split(",").map(x => x.trim().toUpperCase()).filter(Boolean)));
+    if (symbolList.length === 0) { push("error", "Enter at least one ticker."); return; }
     setCreating(true);
     try {
-      const result: any = await accounts.createWatchlist(name, symbols.split(",").map(x => x.trim()).filter(Boolean));
+      const checks = await Promise.allSettled(symbolList.map(s => signals.inputs(s)));
+      const invalid = symbolList.filter((_, i) => checks[i].status === "rejected");
+      if (invalid.length > 0) {
+        push("error", `Not a recognized ticker: ${invalid.join(", ")}`);
+        setCreating(false);
+        return;
+      }
+      const result: any = await accounts.createWatchlist(name, symbolList);
       nav(`/watchlists/${result.watchlist.watchlistId}`);
     } catch (e) { push("error", errorText(e)); setCreating(false); }
   };
@@ -692,7 +734,15 @@ export function WatchlistsPage() {
                   <div className="mt-4 flex flex-wrap gap-2">
                     {item.entries.length === 0
                       ? <span className="text-xs text-slate-500">No symbols yet.</span>
-                      : item.entries.map(entry => <TickerPill key={entry.ticker} ticker={entry.ticker} active={entry.active} />)}
+                      : item.entries.map(entry => (
+                          <TickerPriceChip
+                            key={entry.ticker}
+                            ticker={entry.ticker}
+                            active={entry.active}
+                            price={prices[entry.ticker]?.price}
+                            changePercent={prices[entry.ticker]?.changePercent}
+                          />
+                        ))}
                   </div>
 
                   <div className="mt-5 flex items-center justify-end gap-4 border-t border-slate-100 pt-3 text-xs font-semibold dark:border-slate-800">
@@ -727,12 +777,16 @@ export function WatchlistDetailPage() {
   const load = () => accounts.watchlist(watchlistId).then(setData).catch(e => setError(errorText(e)));
   useEffect(() => { void load(); }, [watchlistId]);
 
+  const prices = usePriceMap(useMemo(() => data?.entries.map(e => e.ticker) ?? [], [data]));
+
   if (!data) return <AppShell>{error ? <ErrorPanel message={error} /> : <Loading />}</AppShell>;
 
   const addTicker = async () => {
     if (!ticker.trim()) return;
     const symbol = ticker.trim().toUpperCase();
     setAdding(true);
+    try { await signals.inputs(symbol); }
+    catch { push("error", `"${symbol}" isn't a recognized ticker.`); setAdding(false); return; }
     try { await accounts.addTicker(watchlistId, symbol); setTicker(""); await load(); push("success", `Added ${symbol}.`); }
     catch (e) { push("error", errorText(e)); }
     finally { setAdding(false); }
@@ -787,9 +841,17 @@ export function WatchlistDetailPage() {
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {data.entries.map(entry => (
                 <li key={entry.ticker} className="flex flex-col gap-3 px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <StockLogo symbol={entry.ticker} />
                     <span className="font-bold text-slate-900 dark:text-white">{entry.ticker}</span>
+                    {prices[entry.ticker] && (
+                      <span className="text-xs">
+                        <span className="tabular-nums text-slate-500 dark:text-slate-400">${prices[entry.ticker].price.toFixed(2)}</span>{" "}
+                        <span className={`tabular-nums font-semibold ${prices[entry.ticker].changePercent >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                          {prices[entry.ticker].changePercent >= 0 ? "+" : ""}{prices[entry.ticker].changePercent.toFixed(2)}%
+                        </span>
+                      </span>
+                    )}
                     <TickerPill ticker={entry.active ? "ACTIVE" : "INACTIVE"} active={entry.active} />
                   </div>
                   <div className="flex items-center gap-2">

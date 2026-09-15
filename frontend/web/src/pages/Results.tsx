@@ -1,12 +1,13 @@
 import {
-  Activity, BarChart3, Bot, CheckCircle2, Clock, Gauge, Layers, Newspaper, TrendingUp, Zap,
+  Activity, Archive, ArrowDown, BarChart3, CheckCircle2, Clock, Cpu, Database, Gauge, Layers, Newspaper, Receipt,
+  ShieldCheck, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { AppShell, Panel } from "../components/ui";
 
-// Figures below are drawn directly from the project's final report (20-session historical
-// replay + AI model development evaluation), Sept 2026. Kept static/hardcoded — this page
+// Figures below are from the project's AI model development and a 20-session historical
+// replay evaluation of the full system, Sept 2026. Kept static/hardcoded — this page
 // documents a fixed evaluation, not live telemetry.
 
 function StatCard({ icon: Icon, tone, label, value, detail }: { icon: LucideIcon; tone: "indigo" | "emerald" | "amber" | "rose"; label: string; value: string; detail?: string }) {
@@ -55,19 +56,119 @@ function SectionHeading({ eyebrow, title, subtitle }: { eyebrow: string; title: 
   );
 }
 
+interface PipelineStage { icon: LucideIcon; title: string; items: string[]; queue?: string; }
+
+const pipelineStages: PipelineStage[] = [
+  {
+    icon: Database,
+    title: "Data collection",
+    items: [
+      "Market Data Service — OHLCV bars from Alpaca, computes the 11 technical features below",
+      "News Ingestion Service — real-time financial headlines from Alpaca",
+    ],
+    queue: "market-data, financial-news",
+  },
+  {
+    icon: Cpu,
+    title: "AI analysis",
+    items: [
+      "News Impact Prediction — fine-tuned FinBERT → UP/DOWN direction + confidence",
+      "Price Prediction — multi-input LSTM combining a 20×11 market sequence with the news signal",
+    ],
+    queue: "news-sentiment, predictions",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Trading decision",
+    items: ["Strategy & Decision Engine — confidence ≥ 0.65 and portfolio-aware sizing → BUY / SELL / HOLD"],
+    queue: "orders.approved",
+  },
+  {
+    icon: Receipt,
+    title: "Order execution",
+    items: ["Order Execution Service — validates and submits LIMIT/DAY orders to Alpaca Paper Trading"],
+  },
+  {
+    icon: Archive,
+    title: "Persistence & access",
+    items: [
+      "Order Execution Persister — order projections and broker reconciliation",
+      "Account Service — the only backend this frontend talks to: portfolio, orders, watchlists",
+    ],
+  },
+];
+
+function PipelineCard({ stage, number }: { stage: PipelineStage; number: number }) {
+  return (
+    <div className="flex flex-col rounded-xl border border-slate-200/90 bg-white p-5 shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex items-center gap-3">
+        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+          <stage.icon size={18} />
+          <span className="absolute -right-1.5 -top-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-indigo-600 text-[9px] font-bold text-white">
+            {number}
+          </span>
+        </div>
+        <div className="text-sm font-bold text-slate-900 dark:text-white">{stage.title}</div>
+      </div>
+      <ul className="mt-3 flex-1 space-y-1.5">
+        {stage.items.map(item => (
+          <li key={item} className="flex gap-2 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+            <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-slate-300 dark:bg-slate-600" />
+            {item}
+          </li>
+        ))}
+      </ul>
+      {stage.queue && (
+        <div className="mt-3 inline-flex w-fit items-center rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+          RabbitMQ → {stage.queue}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PipelineDiagram() {
+  const firstRow = pipelineStages.slice(0, 2);
+  const secondRow = pipelineStages.slice(2);
+  return (
+    <div>
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+        {firstRow.map((stage, i) => <PipelineCard key={stage.title} stage={stage} number={i + 1} />)}
+      </div>
+
+      <div className="flex justify-center py-2">
+        <ArrowDown size={18} className="text-indigo-300 dark:text-indigo-500/60" />
+      </div>
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        {secondRow.map((stage, i) => <PipelineCard key={stage.title} stage={stage} number={i + 3} />)}
+      </div>
+    </div>
+  );
+}
+
 export function ResultsPage() {
-  usePageTitle("Results");
+  usePageTitle("Report");
 
   return (
     <AppShell>
       <div className="space-y-10 pb-8">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Project results &amp; evaluation</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Project report</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-            Figures from the final report's AI model development and 20-session historical replay evaluation of the complete
-            event-driven pipeline — market data through paper-trade execution.
+            How the pipeline is built, and how the AI models and full system performed across a 20-session historical
+            replay evaluation — market data through paper-trade execution.
           </p>
         </div>
+
+        <section className="space-y-4">
+          <SectionHeading
+            eyebrow="Architecture"
+            title="24h trading bot pipeline"
+            subtitle="An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly."
+          />
+          <PipelineDiagram />
+        </section>
 
         <section className="space-y-4">
           <SectionHeading
@@ -143,11 +244,6 @@ export function ResultsPage() {
             <StatCard icon={Gauge} tone="amber" label="Mean max drawdown" value="0.728%" detail="max observed 1.888% in a single session" />
           </div>
         </section>
-
-        <div className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-slate-50 px-4 py-3 text-xs text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
-          <Bot size={14} className="shrink-0" />
-          Source: "Real-Time AI-Based Stock Trading System" final report, Team AI Got This, Pusan National University, Sept 2026.
-        </div>
       </div>
     </AppShell>
   );
