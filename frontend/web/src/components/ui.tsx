@@ -98,7 +98,7 @@ const bottomTabs = [
 function BottomTabBar() {
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-50 flex border-t border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 md:hidden"
+      className="fixed inset-x-0 bottom-0 z-50 flex border-t border-slate-200 bg-white/95 backdrop-blur-md dark:border-slate-800 dark:bg-slate-900/95 lg:hidden"
       style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
     >
       {bottomTabs.map(({ to, label, icon: Icon }) => (
@@ -128,15 +128,15 @@ function ConnectionBadge({ className = "" }: { className?: string }) {
   const meta = state.freshness ? freshnessMeta[state.freshness] : null;
   if (!meta) {
     return (
-      <div className={`flex items-center rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 ${className}`}>
-        <span className="mr-1.5 h-1.5 w-1.5 rounded-full bg-slate-400" />
+      <div className={`flex shrink-0 items-center whitespace-nowrap rounded-full border border-slate-200 bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 ${className}`}>
+        <span className="mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-slate-400" />
         Single paper account
       </div>
     );
   }
   return (
-    <div className={`flex items-center rounded-full border px-2.5 py-1 text-[11px] font-medium ${meta.badge} ${className}`}>
-      <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${meta.dot} ${state.freshness === "FRESH" ? "animate-pulse" : ""}`} />
+    <div className={`flex shrink-0 items-center whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-medium ${meta.badge} ${className}`}>
+      <span className={`mr-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${meta.dot} ${state.freshness === "FRESH" ? "animate-pulse" : ""}`} />
       {meta.label}
     </div>
   );
@@ -228,7 +228,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 Paper
               </span>
             </NavLink>
-            <nav className="hidden items-center rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800 md:flex">
+            <nav className="hidden items-center rounded-lg border border-slate-200 bg-slate-100 p-1 dark:border-slate-700 dark:bg-slate-800 lg:flex">
               <TabLink to="/dashboard">Dashboard</TabLink>
               <TabLink to="/orders">Orders</TabLink>
               <TabLink to="/watchlists">Watchlists</TabLink>
@@ -243,7 +243,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 sm:px-6">{children}</main>
-      <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 md:pb-8">
+      <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 lg:pb-8">
         <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs sm:flex-row sm:px-6">
           <div className="flex items-center gap-2">
             <Logo />
