@@ -102,6 +102,14 @@ function ModelInputsPanel({ features: f }: { features: MarketFeatures }) {
   );
 }
 
+// News providers sometimes hand back HTML-escaped headlines (e.g. "Storage &amp; Peripherals").
+// React renders text nodes literally, so without this it shows the raw entity instead of "&".
+function decodeHtmlEntities(text: string): string {
+  const el = document.createElement("textarea");
+  el.innerHTML = text;
+  return el.value;
+}
+
 export function NewsRow({ item }: { item: NewsSignal }) {
   return (
     <a
@@ -112,7 +120,7 @@ export function NewsRow({ item }: { item: NewsSignal }) {
     >
       <StockLogo symbol={item.symbol} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium leading-snug text-slate-800 dark:text-slate-200">{item.headline}</p>
+        <p className="text-sm font-medium leading-snug text-slate-800 dark:text-slate-200">{decodeHtmlEntities(item.headline)}</p>
         <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400">
           <span className="font-semibold text-slate-500 dark:text-slate-400">{item.symbol}</span>
           <span>·</span>
@@ -208,7 +216,7 @@ export function SentimentChart({ inputs, news }: { inputs: SignalInputs; news: N
       setHover({
         pixelX, pixelY, markerX: nearestDot.cx, markerY: nearestDot.cy, isNews: true,
         title: `${nearestDot.direction} · ${Math.round(nearestDot.confidence * 100)}% avg confidence`,
-        subtitle: `${nearestDot.headline}${more}`,
+        subtitle: `${decodeHtmlEntities(nearestDot.headline)}${more}`,
       });
       return;
     }
