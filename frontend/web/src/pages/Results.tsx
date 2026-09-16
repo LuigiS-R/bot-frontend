@@ -1,6 +1,6 @@
 import {
-  Activity, Archive, ArrowDown, BarChart3, CheckCircle2, Clock, Cpu, Database, Gauge, Layers, Newspaper, Receipt,
-  ShieldCheck, TrendingUp, Zap,
+  Activity, AlertTriangle, Archive, ArrowDown, BarChart3, CheckCircle2, Clock, Cpu, Database, Gauge, Layers, Newspaper,
+  Receipt, ShieldCheck, Target, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -229,6 +229,29 @@ export function ResultsPage() {
               </div>
             </Panel>
           </div>
+        </section>
+
+        <section className="space-y-4">
+          <SectionHeading
+            eyebrow="Integrated evaluation"
+            title="Historical replay: does the accuracy above hold up end-to-end?"
+            subtitle="The 70.1% figure above is a model-development validation result. The historical replay tests the same LSTM inside the full streaming pipeline, on unseen chronological data."
+          />
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard icon={AlertTriangle} tone="rose" label="Integrated directional accuracy" value="49.386%" detail="3,016 of 6,107 non-flat predictions correct" />
+            <StatCard icon={Target} tone="amber" label="Majority-class baseline" value="50.492%" detail="Always predicting the more common direction" />
+            <StatCard icon={Gauge} tone="indigo" label="Balanced accuracy" value="49.702%" detail="ROC-AUC 0.4741" />
+            <StatCard icon={Layers} tone="indigo" label="Predictions replayed" value="7,298" detail="across 20 sessions, ~220x market speed" />
+          </div>
+          <Panel className="flex items-start gap-3 p-5">
+            <AlertTriangle size={16} className="mt-0.5 shrink-0 text-amber-500" />
+            <p className="text-xs leading-relaxed text-slate-600 dark:text-slate-400">
+              Under the integrated replay, the LSTM did not beat the majority-class baseline — its 70.1% validation
+              accuracy did not generalize to unseen chronological data through the full pipeline. This is reported
+              here as-is: the strongest result of this project is the reliability of the end-to-end system
+              (queueing, latency, order execution), not a demonstrated trading edge.
+            </p>
+          </Panel>
         </section>
 
         <section className="space-y-4">
