@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ArrowDownRight, ArrowUpRight, BarChart3, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Radio, Receipt, Sun, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CircleUserRound, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Radio, Receipt, Sun, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import type { Freshness } from "../api/types";
+import { accounts } from "../api/accountsClient";
+import type { Account, Freshness } from "../api/types";
 import { useConnection } from "../state/connection";
 import { useTheme } from "../state/theme";
 
@@ -141,16 +142,75 @@ function ConnectionBadge({ className = "" }: { className?: string }) {
   );
 }
 
-function ThemeToggle() {
+function AccountMenu() {
+  const [open, setOpen] = useState(false);
+  const [account, setAccount] = useState<Account>();
   const { theme, toggleTheme } = useTheme();
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // Best-effort — this is a header affordance, not the source of truth for
+    // account data (the dashboard already owns that), so a failure here just
+    // means the menu shows "—" instead of surfacing an error toast.
+    accounts.account().then(d => setAccount((d as { account?: Account }).account)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open]);
+
   return (
-    <button
-      onClick={toggleTheme}
-      title="Toggle light / dark theme"
-      className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white dark:active:bg-slate-800"
-    >
-      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-    </button>
+    <div className="relative" ref={rootRef}>
+      <button
+        onClick={() => setOpen(o => !o)}
+        title="Account"
+        aria-expanded={open}
+        className={`flex h-8 w-8 touch-manipulation items-center justify-center rounded-lg border text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white dark:active:bg-slate-800 ${
+          open ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-400" : "border-slate-200 dark:border-slate-700"
+        }`}
+      >
+        <CircleUserRound size={17} />
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full z-50 mt-2 w-64 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="border-b border-slate-100 p-4 dark:border-slate-800">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Paper trading account</div>
+            <div className="mt-1 font-bold text-slate-900 dark:text-white">{account?.accountNumber ?? "—"}</div>
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {account?.status ? account.status.charAt(0) + account.status.slice(1).toLowerCase() : "Status unavailable"}
+            </div>
+          </div>
+
+          <div className="p-1.5">
+            <button
+              onClick={toggleTheme}
+              className="flex w-full items-center justify-between rounded-lg px-3 py-2 text-sm text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <span>Appearance</span>
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 dark:text-slate-400">
+                {theme === "dark" ? <Sun size={13} /> : <Moon size={13} />}
+                {theme === "dark" ? "Light" : "Dark"}
+              </span>
+            </button>
+          </div>
+
+          <div className="border-t border-slate-100 px-4 py-3 text-[11px] leading-relaxed text-slate-400 dark:border-slate-800 dark:text-slate-500">
+            Shared team paper account — no individual login.
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -178,7 +238,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
             <ConnectionBadge />
-            <ThemeToggle />
+            <AccountMenu />
           </div>
         </div>
       </header>
