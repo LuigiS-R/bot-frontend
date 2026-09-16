@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router-dom";
-import { ArrowDownRight, ArrowUpRight, BarChart3, CircleUserRound, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Radio, Receipt, Sun, TrendingUp } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CircleUser, ChevronUp, LayoutDashboard, ListChecks, Loader2, Moon, Radio, Receipt, Sun, TrendingUp } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { accounts } from "../api/accountsClient";
 import type { Account, Freshness } from "../api/types";
@@ -179,7 +179,7 @@ function AccountMenu() {
           open ? "border-indigo-300 bg-indigo-50 text-indigo-600 dark:border-indigo-500/40 dark:bg-indigo-500/10 dark:text-indigo-400" : "border-slate-200 dark:border-slate-700"
         }`}
       >
-        <CircleUserRound size={17} />
+        <CircleUser size={17} />
       </button>
 
       {open && (
