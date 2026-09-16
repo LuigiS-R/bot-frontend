@@ -26,11 +26,26 @@ export default defineConfig(({ mode }) => {
               ? '/api/signals/news.ts'
               : pathname === '/api/signals/inputs'
                 ? '/api/signals/inputs.ts'
-                : null;
+                : pathname === '/api/signals/analyze'
+                  ? '/api/signals/analyze.ts'
+                  : null;
             if (!modPath) return next();
             try {
               const mod = await server.ssrLoadModule(modPath);
-              const request = new Request(`http://localhost${req.url}`);
+              let body: string | undefined;
+              if (req.method === 'POST') {
+                body = await new Promise<string>((resolve, reject) => {
+                  let data = '';
+                  req.on('data', chunk => { data += chunk; });
+                  req.on('end', () => resolve(data));
+                  req.on('error', reject);
+                });
+              }
+              const request = new Request(`http://localhost${req.url}`, {
+                method: req.method,
+                headers: { 'content-type': (req.headers['content-type'] as string) || 'application/json' },
+                body,
+              });
               const response: Response = await mod.default(request);
               res.statusCode = response.status;
               response.headers.forEach((value, key) => res.setHeader(key, value));

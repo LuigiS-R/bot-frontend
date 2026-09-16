@@ -1,28 +1,23 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Newspaper,
-  Radio, ShieldCheck, TrendingUp, Zap,
+  AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Loader2, Newspaper,
+  Radio, Send, ShieldCheck, Sparkles, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { accounts } from "../api/accountsClient";
+import { accounts, errorText } from "../api/accountsClient";
 import { signals } from "../api/signalsClient";
 import type { Dashboard, Freshness, NewsSignal, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { EmptyState, freshnessMeta, Loading, Logo, SiteFooter } from "../components/ui";
+import { EmptyState, ErrorPanel, freshnessMeta, Loading, Logo, SiteFooter } from "../components/ui";
 import { NewsRow, readMacd, readRsi, ReadBadge, SentimentChart } from "./Signals";
 
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
 
-// Operational metrics only — no directional-accuracy claims here. The LSTM's 70.1%
-// validation accuracy didn't hold up in the integrated historical replay (49.386%,
-// below the 50.492% majority-class baseline — see the Report page), so this hero
-// leads with the numbers that did hold up under the real pipeline.
-const stats: { label: string; value: string }[] = [
-  { label: "Paper-order fill rate", value: "99.688%" },
-  { label: "Predictions / second", value: "3.427" },
-  { label: "LSTM inference latency", value: "101.7 ms" },
-  { label: "RabbitMQ queue errors", value: "0" },
+const PLAYGROUND_PRESETS = [
+  "Company reports record quarterly revenue, beating analyst estimates by a wide margin.",
+  "Federal Reserve signals it may keep interest rates higher for longer amid persistent inflation.",
+  "Firm announces routine leadership transition as part of its long-planned succession process.",
 ];
 
 interface Feature { icon: LucideIcon; title: string; body: string; tag: string; }
@@ -236,6 +231,92 @@ function LivePreviewPanel() {
   );
 }
 
+function FinbertPlayground() {
+  const [text, setText] = useState(PLAYGROUND_PRESETS[0]);
+  const [result, setResult] = useState<{ direction: "UP" | "DOWN"; confidence: number }>();
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const analyze = (headline: string) => {
+    const trimmed = headline.trim();
+    if (!trimmed) return;
+    setText(headline);
+    setLoading(true);
+    setError("");
+    setResult(undefined);
+    signals.analyze(trimmed)
+      .then(setResult)
+      .catch(e => setError(errorText(e)))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <div id="playground" className="mt-16 w-full max-w-2xl scroll-mt-24">
+      <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+        <Sparkles size={13} />
+        Interactive playground
+      </div>
+      <h2 className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Test the real FinBERT model</h2>
+      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+        Type any financial headline — this calls your actual fine-tuned model live, not a simulation.
+      </p>
+
+      <div className="mt-5 rounded-2xl border border-slate-200/90 bg-white p-5 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex gap-2">
+          <input
+            value={text}
+            onChange={e => setText(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && analyze(text)}
+            placeholder="Paste or type a financial headline…"
+            className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          />
+          <button
+            onClick={() => analyze(text)}
+            disabled={loading || !text.trim()}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} />}
+            Analyze
+          </button>
+        </div>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <span className="self-center text-[11px] text-slate-400">Try:</span>
+          {PLAYGROUND_PRESETS.map((p, i) => (
+            <button
+              key={i}
+              onClick={() => analyze(p)}
+              className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400"
+            >
+              {p.length > 42 ? p.slice(0, 42) + "…" : p}
+            </button>
+          ))}
+        </div>
+
+        {error && <div className="mt-4"><ErrorPanel message={error} /></div>}
+
+        {result && !error && (
+          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+            <div className="flex items-center justify-between">
+              <span className={`inline-flex items-center gap-1.5 text-sm font-bold ${result.direction === "UP" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                {result.direction === "UP" ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+                {result.direction === "UP" ? "Bullish signal" : "Bearish signal"}
+              </span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{Math.round(result.confidence * 100)}% confidence</span>
+            </div>
+            <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div
+                className={`h-full rounded-full ${result.direction === "UP" ? "bg-emerald-500" : "bg-rose-500"}`}
+                style={{ width: `${Math.round(result.confidence * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function LandingPage() {
   usePageTitle("Tradify");
   const navigate = useNavigate();
@@ -265,7 +346,7 @@ export function LandingPage() {
           </div>
           <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-300 md:flex">
             <a href="#preview" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Live preview</a>
-            <a href="#metrics" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Metrics</a>
+            <a href="#playground" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Playground</a>
             <a href="#pipeline" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Pipeline</a>
           </nav>
           <div className="flex items-center gap-3">
@@ -321,18 +402,7 @@ export function LandingPage() {
           <LivePreviewPanel />
         </div>
 
-        <div id="metrics" className="mt-16 w-full max-w-3xl scroll-mt-24 rounded-2xl border border-indigo-100 bg-gradient-to-b from-indigo-50/60 to-transparent p-6 dark:border-indigo-500/10 dark:from-indigo-500/[0.04]">
-          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Proven at scale</span>
-          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
-            {stats.map(s => (
-              <div key={s.label} className="rounded-xl border border-slate-200/90 bg-white px-4 py-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-                <div className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white sm:text-3xl">{s.value}</div>
-                <div className="mt-1.5 text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{s.label}</div>
-              </div>
-            ))}
-          </div>
-          <p className="mt-4 text-[11px] text-slate-400">From a 20-session historical replay evaluation — full results, including directional accuracy, on the Report page.</p>
-        </div>
+        <FinbertPlayground />
 
         <div className="mt-16 grid w-full grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {features.map(f => (
