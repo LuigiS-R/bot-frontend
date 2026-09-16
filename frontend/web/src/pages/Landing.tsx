@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertCircle, ArrowRight, ArrowUpRight, ArrowDownRight, Database, Newspaper,
+  AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Newspaper,
   Radio, ShieldCheck, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -10,6 +10,7 @@ import { signals } from "../api/signalsClient";
 import type { Dashboard, Freshness, NewsSignal, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
 import { EmptyState, freshnessMeta, Loading, Logo, SiteFooter } from "../components/ui";
+import { NewsRow, readMacd, readRsi, ReadBadge, SentimentChart } from "./Signals";
 
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
 
@@ -120,15 +121,14 @@ function TickerTape() {
   );
 }
 
-interface Preview { symbol: string; close: number; returnPct: number; rsi14: number; macd: number; headlines: NewsSignal[]; }
-
-function readRsi(v: number) { if (v >= 70) return "Overbought"; if (v <= 30) return "Oversold"; return "Neutral"; }
-function readMacd(v: number) { return v >= 0 ? "Bullish momentum" : "Bearish momentum"; }
+interface PreviewData { symbol: string; inputs: SignalInputs; news: NewsSignal[]; }
+type PreviewTab = "signal" | "news";
 
 function LivePreviewPanel() {
-  const [preview, setPreview] = useState<Preview>();
+  const [data, setData] = useState<PreviewData>();
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
+  const [tab, setTab] = useState<PreviewTab>("signal");
 
   useEffect(() => {
     let cancelled = false;
@@ -144,23 +144,21 @@ function LivePreviewPanel() {
           signals.news(symbol).then(r => r.items).catch(() => [] as NewsSignal[]),
         ]);
         if (cancelled) return;
-        setPreview({
-          symbol,
-          close: inputs.features.close,
-          returnPct: inputs.features.return * 100,
-          rsi14: inputs.features.rsi14,
-          macd: inputs.features.macd,
-          headlines: news.slice(0, 2),
-        });
+        setData({ symbol, inputs, news });
         setLoading(false);
       })
       .catch(() => { if (!cancelled) { setFailed(true); setLoading(false); } });
     return () => { cancelled = true; };
   }, []);
 
+  const returnPct = data ? data.inputs.features.return * 100 : 0;
+  const positive = returnPct >= 0;
+  const rsi = data ? readRsi(data.inputs.features.rsi14) : null;
+  const macd = data ? readMacd(data.inputs.features.macd) : null;
+
   return (
-    <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200/90 bg-white text-left shadow-lg dark:border-slate-800 dark:bg-slate-900">
-      <div className="flex items-center justify-between border-b border-slate-200/80 px-5 py-3 dark:border-slate-800">
+    <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200/90 bg-white text-left shadow-xl dark:border-slate-800 dark:bg-slate-900">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-3.5 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
             <span className="h-2.5 w-2.5 rounded-full bg-rose-300" />
@@ -169,60 +167,61 @@ function LivePreviewPanel() {
           </div>
           <span className="hidden font-mono text-[11px] font-medium text-slate-400 sm:inline">tradify · live signal preview</span>
         </div>
-        {preview && <span className="text-[11px] font-semibold text-slate-400">{preview.symbol}</span>}
+        <div className="flex items-center rounded-lg bg-slate-100 p-1 text-xs font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-400">
+          <button
+            onClick={() => setTab("signal")}
+            className={`rounded-md px-3 py-1 transition ${tab === "signal" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "hover:text-slate-900 dark:hover:text-white"}`}
+          >
+            Market signal
+          </button>
+          <button
+            onClick={() => setTab("news")}
+            className={`rounded-md px-3 py-1 transition ${tab === "news" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "hover:text-slate-900 dark:hover:text-white"}`}
+          >
+            News feed
+          </button>
+        </div>
       </div>
 
       <div className="p-5 sm:p-6">
         {loading ? (
           <Loading />
-        ) : failed || !preview ? (
+        ) : failed || !data ? (
           <EmptyState icon={AlertCircle} title="Live preview unavailable" subtitle="Couldn't reach live market data right now — the app itself isn't affected." />
-        ) : (
-          <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Latest bar · {preview.symbol}</div>
-              <div className="mt-2 flex items-baseline gap-2">
-                <span className="text-2xl font-bold tabular-nums text-slate-900 dark:text-white">${preview.close.toFixed(2)}</span>
-                <span className={`inline-flex items-center gap-0.5 text-sm font-bold tabular-nums ${preview.returnPct >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                  {preview.returnPct >= 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                  {preview.returnPct >= 0 ? "+" : ""}{preview.returnPct.toFixed(2)}%
+        ) : tab === "signal" ? (
+          <div>
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-lg font-bold text-slate-900 dark:text-white">{data.symbol}</h3>
+                  {rsi && <ReadBadge tone={rsi.tone} label={rsi.label} />}
+                  {macd && <ReadBadge tone={macd.tone} label={macd.label} />}
+                </div>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last 30 trading days, with recent news sentiment overlaid</p>
+              </div>
+              <div className="text-right">
+                <span className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white">${data.inputs.features.close.toFixed(2)}</span>
+                <span className={`ml-2 inline-flex items-center gap-0.5 text-sm font-bold tabular-nums ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                  {positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+                  {positive ? "+" : ""}{returnPct.toFixed(2)}%
                 </span>
               </div>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/60">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">RSI (14)</div>
-                  <div className="mt-0.5 text-sm font-bold text-slate-800 dark:text-slate-200">{readRsi(preview.rsi14)}</div>
-                </div>
-                <div className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800/60">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">MACD</div>
-                  <div className="mt-0.5 text-sm font-bold text-slate-800 dark:text-slate-200">{readMacd(preview.macd)}</div>
-                </div>
-              </div>
-              <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Same 11 features the LSTM consumes as a 20-step rolling sequence — this is just the latest step, fetched live.</p>
             </div>
 
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Recent headlines</div>
-              {preview.headlines.length === 0 ? (
-                <p className="mt-2 text-xs text-slate-400">No recent headlines for {preview.symbol} right now.</p>
-              ) : (
-                <div className="mt-2 space-y-2.5">
-                  {preview.headlines.map((h, i) => (
-                    <a key={i} href={h.url} target="_blank" rel="noreferrer" className="block rounded-lg border border-slate-100 bg-slate-50 p-3 transition hover:border-indigo-200 dark:border-slate-800 dark:bg-slate-800/60">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-xs font-medium leading-snug text-slate-700 dark:text-slate-300">{h.headline}</p>
-                        {h.direction && (
-                          <span className={`shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-bold ${h.direction === "UP" ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400" : "bg-rose-100 text-rose-700 dark:bg-rose-500/10 dark:text-rose-400"}`}>
-                            {h.direction} {Math.round((h.confidence ?? 0) * 100)}%
-                          </span>
-                        )}
-                      </div>
-                      <span className="mt-1 block text-[10px] text-slate-400">{h.source}</span>
-                    </a>
-                  ))}
-                </div>
-              )}
+            <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30">
+              <SentimentChart inputs={data.inputs} news={data.news} />
             </div>
+            <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Same 11 features the LSTM consumes as a 20-step rolling sequence — this is just the latest step, fetched live.</p>
+          </div>
+        ) : (
+          <div className="-m-5 sm:-m-6">
+            {data.news.length === 0 ? (
+              <p className="p-6 text-xs text-slate-400">No recent headlines for {data.symbol} right now.</p>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
+                {data.news.map((item, i) => <NewsRow key={i} item={item} />)}
+              </div>
+            )}
           </div>
         )}
       </div>
