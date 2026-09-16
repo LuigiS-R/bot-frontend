@@ -214,6 +214,21 @@ function AccountMenu() {
   );
 }
 
+export function SiteFooter() {
+  return (
+    <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 lg:pb-8">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs sm:flex-row sm:px-6">
+        <div className="flex items-center gap-2">
+          <Logo />
+          <span className="font-bold text-indigo-900 dark:text-white">Tradify</span>
+          <span className="text-indigo-700/70 dark:text-indigo-300/70">· Automated paper trading</span>
+        </div>
+        <span className="text-indigo-700/70 dark:text-indigo-300/70">Simulated data via Alpaca Paper Trading — no real funds involved</span>
+      </div>
+    </footer>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
@@ -221,7 +236,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="sticky top-0 z-40 border-b border-slate-200/80 bg-white/90 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-4 md:space-x-8">
-            <NavLink to="/dashboard" className="flex items-center space-x-2.5">
+            <NavLink to="/" className="flex items-center space-x-2.5">
               <Logo />
               <span className="text-lg font-bold tracking-tight text-slate-900 dark:text-white">Tradify</span>
               <span className="hidden rounded-md border border-slate-200 bg-slate-100 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 sm:inline-flex">
@@ -243,16 +258,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 pt-8 sm:px-6">{children}</main>
-      <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 lg:pb-8">
-        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs sm:flex-row sm:px-6">
-          <div className="flex items-center gap-2">
-            <Logo />
-            <span className="font-bold text-indigo-900 dark:text-white">Tradify</span>
-            <span className="text-indigo-700/70 dark:text-indigo-300/70">· Automated paper trading</span>
-          </div>
-          <span className="text-indigo-700/70 dark:text-indigo-300/70">Simulated data via Alpaca Paper Trading — no real funds involved</span>
-        </div>
-      </footer>
+      <SiteFooter />
       <BottomTabBar />
     </div>
   );
