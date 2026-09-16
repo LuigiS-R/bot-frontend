@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Newspaper,
-  Radio, ShieldCheck, TrendingUp, Zap,
+  Radio, Receipt, ShieldCheck, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { accounts } from "../api/accountsClient";
+import { accounts, errorText } from "../api/accountsClient";
 import { signals } from "../api/signalsClient";
-import type { Dashboard, Freshness, NewsSignal, SignalInputs, Watchlist } from "../api/types";
+import type { Dashboard, Freshness, NewsSignal, Order, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { EmptyState, freshnessMeta, Loading, Logo, SiteFooter } from "../components/ui";
+import { DateTime, EmptyState, freshnessMeta, Loading, Logo, Money, OrderStatusBadge, SiteFooter } from "../components/ui";
 import { NewsRow, readMacd, readRsi, ReadBadge, SentimentChart } from "./Signals";
 
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
@@ -122,13 +122,32 @@ function TickerTape() {
 }
 
 interface PreviewData { symbol: string; inputs: SignalInputs; news: NewsSignal[]; }
-type PreviewTab = "signal" | "news";
+type PreviewTab = "signal" | "news" | "orders";
+
+// Deliberately bypasses accounts.orders()'s demo-data fallback — this panel exists to show
+// genuinely live data or say so honestly, never to paper over a backend outage with fake fills.
+function useRealOrders() {
+  const [orders, setOrders] = useState<Order[]>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    fetch("/api/v1/orders")
+      .then(async r => {
+        const body = await r.json().catch(() => undefined);
+        if (!r.ok) throw new Error(body?.message || `Orders unavailable (${r.status}).`);
+        return body as Order[];
+      })
+      .then(setOrders)
+      .catch(e => setError(errorText(e)));
+  }, []);
+  return { orders, error };
+}
 
 function LivePreviewPanel() {
   const [data, setData] = useState<PreviewData>();
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<PreviewTab>("signal");
+  const { orders, error: ordersError } = useRealOrders();
 
   useEffect(() => {
     let cancelled = false;
@@ -180,11 +199,43 @@ function LivePreviewPanel() {
           >
             News feed
           </button>
+          <button
+            onClick={() => setTab("orders")}
+            className={`rounded-md px-3 py-1 transition ${tab === "orders" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "hover:text-slate-900 dark:hover:text-white"}`}
+          >
+            Recent orders
+          </button>
         </div>
       </div>
 
       <div className="p-5 sm:p-6">
-        {loading ? (
+        {tab === "orders" ? (
+          !orders && !ordersError ? (
+            <Loading />
+          ) : ordersError ? (
+            <EmptyState icon={AlertCircle} title="Order feed unavailable" subtitle={ordersError} />
+          ) : !orders || orders.length === 0 ? (
+            <EmptyState icon={Receipt} title="No orders yet." subtitle="Orders from the bot or from manual trades will appear here." />
+          ) : (
+            <div className="-m-5 divide-y divide-slate-100 sm:-m-6 dark:divide-slate-800">
+              {orders.slice(0, 5).map(o => (
+                <div key={o.orderId} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-xs font-bold ${o.side === "BUY" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{o.side}</span>
+                      <span className="text-sm font-bold text-slate-900 dark:text-white">{o.symbol}</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400"><DateTime value={o.createdAt} /></span>
+                  </div>
+                  <div className="text-right">
+                    <Money value={o.limitPrice} className="text-sm font-bold text-slate-700 dark:text-slate-300" />
+                    <div className="mt-0.5"><OrderStatusBadge status={o.status} /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )
+        ) : loading ? (
           <Loading />
         ) : failed || !data ? (
           <EmptyState icon={AlertCircle} title="Live preview unavailable" subtitle="Couldn't reach live market data right now — the app itself isn't affected." />
@@ -314,15 +365,18 @@ export function LandingPage() {
           <LivePreviewPanel />
         </div>
 
-        <div id="metrics" className="mt-20 grid w-full max-w-3xl scroll-mt-24 grid-cols-2 gap-5 sm:grid-cols-4">
-          {stats.map(s => (
-            <div key={s.label} className="rounded-2xl border border-slate-200/90 bg-white px-5 py-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white sm:text-3xl">{s.value}</div>
-              <div className="mt-1.5 text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{s.label}</div>
-            </div>
-          ))}
+        <div id="metrics" className="mt-16 w-full max-w-3xl scroll-mt-24 rounded-2xl border border-indigo-100 bg-gradient-to-b from-indigo-50/60 to-transparent p-6 dark:border-indigo-500/10 dark:from-indigo-500/[0.04]">
+          <span className="text-[11px] font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">Proven at scale</span>
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            {stats.map(s => (
+              <div key={s.label} className="rounded-xl border border-slate-200/90 bg-white px-4 py-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
+                <div className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white sm:text-3xl">{s.value}</div>
+                <div className="mt-1.5 text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{s.label}</div>
+              </div>
+            ))}
+          </div>
+          <p className="mt-4 text-[11px] text-slate-400">From a 20-session historical replay evaluation — full results, including directional accuracy, on the Report page.</p>
         </div>
-        <p className="mt-3 text-[11px] text-slate-400">From a 20-session historical replay evaluation — full results, including directional accuracy, on the Report page.</p>
 
         <div className="mt-16 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {features.map(f => (
@@ -338,7 +392,7 @@ export function LandingPage() {
         </div>
       </main>
 
-      <section id="pipeline" className="scroll-mt-24 bg-slate-900 py-16 text-slate-100">
+      <section id="pipeline" className="scroll-mt-24 bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-950 py-16 text-slate-100">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">End-to-end pipeline</span>
@@ -347,8 +401,8 @@ export function LandingPage() {
           </div>
           <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {pipelineStages.map(stage => (
-              <div key={stage.step} className="rounded-2xl border border-slate-700/80 bg-slate-800/70 p-5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-400">
+              <div key={stage.step} className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] p-5 backdrop-blur-sm">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
                   <stage.icon size={16} />
                 </div>
                 <div className="mt-3 font-mono text-[10px] font-bold text-indigo-400">{stage.step}</div>
