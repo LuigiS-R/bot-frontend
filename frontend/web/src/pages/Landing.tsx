@@ -5,7 +5,7 @@ import {
   Radio, ShieldCheck, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { accounts, errorText } from "../api/accountsClient";
+import { accounts } from "../api/accountsClient";
 import { signals } from "../api/signalsClient";
 import type { Dashboard, Freshness, NewsSignal, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
@@ -69,8 +69,53 @@ function ConnectionPill() {
   if (!meta) return null;
   return (
     <div className={`hidden items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium sm:inline-flex ${meta.badge}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot} ${freshness === "FRESH" ? "animate-pulse" : ""}`} />
+      <span className="relative flex h-2 w-2">
+        {freshness === "FRESH" && <span className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-60 ${meta.dot}`} />}
+        <span className={`relative inline-flex h-2 w-2 rounded-full ${meta.dot}`} />
+      </span>
       {meta.label}
+    </div>
+  );
+}
+
+// Real, live-fetched quotes for a fixed set of well-known symbols — no fabricated
+// prices or random-walk animation. Just the price/features endpoint already used
+// elsewhere in the app, called once per symbol and rendered in a scrolling strip.
+const TICKER_SYMBOLS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN", "SPY", "META"];
+interface TickerQuote { symbol: string; close: number; returnPct: number; }
+
+function TickerTape() {
+  const [quotes, setQuotes] = useState<TickerQuote[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    Promise.allSettled(TICKER_SYMBOLS.map(symbol => signals.inputs(symbol) as Promise<SignalInputs>))
+      .then(results => {
+        if (cancelled) return;
+        const ok = results
+          .filter((r): r is PromiseFulfilledResult<SignalInputs> => r.status === "fulfilled")
+          .map(r => ({ symbol: r.value.symbol, close: r.value.features.close, returnPct: r.value.features.return * 100 }));
+        setQuotes(ok);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  if (quotes.length === 0) return null;
+  const track = [...quotes, ...quotes];
+
+  return (
+    <div className="overflow-hidden border-b border-slate-800 bg-slate-950 py-2 text-xs">
+      <div className="flex w-max animate-ticker-scroll">
+        {track.map((q, i) => (
+          <div key={i} className="inline-flex items-center gap-2 whitespace-nowrap border-r border-slate-800 px-6">
+            <span className="font-bold text-slate-200">{q.symbol}</span>
+            <span className="text-slate-400">${q.close.toFixed(2)}</span>
+            <span className={`font-semibold ${q.returnPct >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+              {q.returnPct >= 0 ? "+" : ""}{q.returnPct.toFixed(2)}%
+            </span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -201,6 +246,8 @@ export function LandingPage() {
         }}
       />
 
+      <TickerTape />
+
       <header className="border-b border-slate-200/80 bg-white/90 backdrop-blur-md transition-colors dark:border-slate-800 dark:bg-slate-900/90">
         <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6">
           <div className="flex items-center space-x-2.5">
@@ -215,36 +262,49 @@ export function LandingPage() {
             <a href="#metrics" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Metrics</a>
             <a href="#pipeline" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Pipeline</a>
           </nav>
-          <ConnectionPill />
+          <div className="flex items-center gap-3">
+            <ConnectionPill />
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
+            >
+              Launch app
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-4 pb-20 pt-16 text-center sm:px-6 sm:pt-24">
-        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-indigo-500 dark:bg-indigo-400" />
+        <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500 dark:bg-indigo-400" />
           Real-time AI-based stock trading system
         </div>
 
-        <h1 className="mt-6 text-4xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-5xl">
-          AI-driven signals.<br className="hidden sm:block" /> Automated paper trading.
+        <h1 className="mt-7 max-w-4xl text-5xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl lg:text-7xl">
+          <span className="bg-gradient-to-r from-slate-900 via-indigo-600 to-indigo-500 bg-clip-text text-transparent dark:from-white dark:via-indigo-300 dark:to-indigo-400">
+            AI-driven signals.
+          </span>
+          <br />
+          <span className="text-slate-900 dark:text-white">Automated paper trading.</span>
         </h1>
 
-        <p className="mt-5 max-w-xl text-sm leading-relaxed text-slate-500 dark:text-slate-400 sm:text-base">
-          Tradify combines FinBERT news sentiment and an LSTM price-prediction model to generate trading signals,
+        <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-500 dark:text-slate-400 sm:text-lg">
+          Tradify combines <b className="font-semibold text-slate-700 dark:text-slate-300">FinBERT news sentiment</b> and an{" "}
+          <b className="font-semibold text-slate-700 dark:text-slate-300">LSTM price-prediction model</b> to generate trading signals,
           executed automatically through Alpaca Paper Trading — real market data, simulated money.
         </p>
 
-        <div className="mt-9 flex flex-col items-center gap-3 sm:flex-row">
+        <div className="mt-10 flex flex-col items-center gap-4 sm:flex-row">
           <button
             onClick={() => navigate("/dashboard")}
-            className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-sm shadow-indigo-600/20 transition hover:bg-indigo-500 active:scale-95"
+            className="group inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-blue-600 px-8 py-4 text-sm font-bold text-white shadow-lg shadow-indigo-600/30 transition hover:-translate-y-0.5 hover:shadow-xl hover:shadow-indigo-600/40 active:translate-y-0"
           >
             Enter dashboard
-            <ArrowRight size={16} />
+            <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
           </button>
           <button
             onClick={() => navigate("/results")}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-7 py-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700"
           >
             <Radio size={15} />
             View the pipeline
@@ -255,11 +315,11 @@ export function LandingPage() {
           <LivePreviewPanel />
         </div>
 
-        <div id="metrics" className="mt-16 grid w-full max-w-2xl scroll-mt-24 grid-cols-2 gap-4 sm:grid-cols-4">
+        <div id="metrics" className="mt-20 grid w-full max-w-3xl scroll-mt-24 grid-cols-2 gap-5 sm:grid-cols-4">
           {stats.map(s => (
-            <div key={s.label} className="rounded-xl border border-slate-200/90 bg-white px-4 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-              <div className="text-xl font-bold tabular-nums text-slate-900 dark:text-white">{s.value}</div>
-              <div className="mt-1 text-[11px] leading-tight text-slate-500 dark:text-slate-400">{s.label}</div>
+            <div key={s.label} className="rounded-2xl border border-slate-200/90 bg-white px-5 py-6 shadow-sm transition hover:-translate-y-0.5 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <div className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white sm:text-3xl">{s.value}</div>
+              <div className="mt-1.5 text-[11px] font-medium leading-tight text-slate-500 dark:text-slate-400">{s.label}</div>
             </div>
           ))}
         </div>
