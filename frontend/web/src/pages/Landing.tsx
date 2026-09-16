@@ -9,7 +9,7 @@ import { accounts, errorText } from "../api/accountsClient";
 import { signals } from "../api/signalsClient";
 import type { Dashboard, Freshness, NewsSignal, Order, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { DateTime, EmptyState, freshnessMeta, Loading, Logo, Money, OrderStatusBadge, SiteFooter } from "../components/ui";
+import { EmptyState, freshnessMeta, Loading, Logo, Money, SiteFooter } from "../components/ui";
 import { NewsRow, readMacd, readRsi, ReadBadge, SentimentChart } from "./Signals";
 
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
@@ -217,22 +217,22 @@ function LivePreviewPanel() {
           ) : !orders || orders.length === 0 ? (
             <EmptyState icon={Receipt} title="No orders yet." subtitle="Orders from the bot or from manual trades will appear here." />
           ) : (
-            <div className="-m-5 divide-y divide-slate-100 sm:-m-6 dark:divide-slate-800">
-              {orders.slice(0, 5).map(o => (
-                <div key={o.orderId} className="flex items-center justify-between gap-3 px-5 py-3 sm:px-6">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className={`text-xs font-bold ${o.side === "BUY" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>{o.side}</span>
-                      <span className="text-sm font-bold text-slate-900 dark:text-white">{o.symbol}</span>
-                    </div>
-                    <span className="text-[11px] text-slate-400"><DateTime value={o.createdAt} /></span>
+            <div className="-m-5 rounded-b-2xl bg-slate-900 p-5 text-slate-200 dark:bg-black sm:-m-6 sm:p-6">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Alpaca execution log</span>
+                <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400">PAPER TRADING</span>
+              </div>
+              <div className="divide-y divide-slate-800/80 font-mono text-xs">
+                {orders.slice(0, 5).map(o => (
+                  <div key={o.orderId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
+                    <span className={`font-bold ${o.side === "BUY" ? "text-emerald-400" : "text-rose-400"}`}>
+                      {o.side} {o.quantity ?? "—"} {o.symbol}
+                    </span>
+                    <span className="text-slate-400">@ <Money value={o.limitPrice} className="text-slate-300" /></span>
+                    <span className="text-[10px] uppercase tracking-wide text-slate-500">{o.status}</span>
                   </div>
-                  <div className="text-right">
-                    <Money value={o.limitPrice} className="text-sm font-bold text-slate-700 dark:text-slate-300" />
-                    <div className="mt-0.5"><OrderStatusBadge status={o.status} /></div>
-                  </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )
         ) : loading ? (
@@ -248,7 +248,7 @@ function LivePreviewPanel() {
                   {rsi && <ReadBadge tone={rsi.tone} label={rsi.label} />}
                   {macd && <ReadBadge tone={macd.tone} label={macd.label} />}
                 </div>
-                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Last 30 trading days, with recent news sentiment overlaid</p>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Live 30-day price, fetched from Alpaca on page load</p>
               </div>
               <div className="text-right">
                 <span className="text-2xl font-extrabold tabular-nums text-slate-900 dark:text-white">${data.inputs.features.close.toFixed(2)}</span>
@@ -259,7 +259,14 @@ function LivePreviewPanel() {
               </div>
             </div>
 
-            <div className="mt-5 rounded-xl border border-slate-100 bg-slate-50/60 p-3 dark:border-slate-800 dark:bg-slate-800/30">
+            <div className="mt-5 rounded-xl border border-slate-100 bg-white p-3 shadow-inner dark:border-slate-800 dark:bg-slate-950/40">
+              <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                <span className="inline-block h-2 w-2 rounded-full bg-indigo-500" />
+                Historical price ($)
+                <span className="mx-1 text-slate-300 dark:text-slate-700">·</span>
+                <span className="inline-block h-2 w-2 rounded-full bg-emerald-500" />
+                News sentiment (dot size = confidence)
+              </div>
               <SentimentChart inputs={data.inputs} news={data.news} />
             </div>
             <p className="mt-3 text-[11px] leading-relaxed text-slate-400">Same 11 features the LSTM consumes as a 20-step rolling sequence — this is just the latest step, fetched live.</p>
