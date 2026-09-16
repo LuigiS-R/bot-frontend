@@ -2,14 +2,14 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Newspaper,
-  Radio, Receipt, ShieldCheck, TrendingUp, Zap,
+  Radio, ShieldCheck, TrendingUp, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { accounts, errorText } from "../api/accountsClient";
+import { accounts } from "../api/accountsClient";
 import { signals } from "../api/signalsClient";
-import type { Dashboard, Freshness, NewsSignal, Order, SignalInputs, Watchlist } from "../api/types";
+import type { Dashboard, Freshness, NewsSignal, SignalInputs, Watchlist } from "../api/types";
 import { usePageTitle } from "../hooks/usePageTitle";
-import { EmptyState, freshnessMeta, Loading, Logo, Money, SiteFooter } from "../components/ui";
+import { EmptyState, freshnessMeta, Loading, Logo, SiteFooter } from "../components/ui";
 import { NewsRow, readMacd, readRsi, ReadBadge, SentimentChart } from "./Signals";
 
 const DEFAULT_TICKERS = ["AAPL", "NVDA", "TSLA", "MSFT", "AMZN"];
@@ -55,10 +55,10 @@ const features: Feature[] = [
 
 interface PipelineStage { icon: LucideIcon; step: string; title: string; body: string; }
 const pipelineStages: PipelineStage[] = [
-  { icon: Database, step: "01 / INGESTION", title: "Market data & news", body: "OHLCV bars and financial headlines collected from Alpaca, published to RabbitMQ." },
-  { icon: Newspaper, step: "02 / AI ANALYSIS", title: "FinBERT + LSTM", body: "News sentiment and an 11-feature market sequence combine into a direction + confidence score." },
-  { icon: ShieldCheck, step: "03 / DECISION", title: "Strategy engine", body: "Confidence ≥ 0.65 and portfolio-aware sizing turn a prediction into a BUY, SELL, or HOLD." },
-  { icon: Zap, step: "04 / EXECUTION", title: "Order execution", body: "Approved LIMIT/DAY orders are validated and submitted to Alpaca Paper Trading." },
+  { icon: Database, step: "INGESTION", title: "Market data & news", body: "OHLCV bars and financial headlines collected from Alpaca, published to RabbitMQ." },
+  { icon: Newspaper, step: "AI ANALYSIS", title: "FinBERT + LSTM", body: "News sentiment and an 11-feature market sequence combine into a direction + confidence score." },
+  { icon: ShieldCheck, step: "DECISION", title: "Strategy engine", body: "Confidence ≥ 0.65 and portfolio-aware sizing turn a prediction into a BUY, SELL, or HOLD." },
+  { icon: Zap, step: "EXECUTION", title: "Order execution", body: "Approved LIMIT/DAY orders are validated and submitted to Alpaca Paper Trading." },
 ];
 
 function ConnectionPill() {
@@ -122,32 +122,13 @@ function TickerTape() {
 }
 
 interface PreviewData { symbol: string; inputs: SignalInputs; news: NewsSignal[]; }
-type PreviewTab = "signal" | "news" | "orders";
-
-// Deliberately bypasses accounts.orders()'s demo-data fallback — this panel exists to show
-// genuinely live data or say so honestly, never to paper over a backend outage with fake fills.
-function useRealOrders() {
-  const [orders, setOrders] = useState<Order[]>();
-  const [error, setError] = useState("");
-  useEffect(() => {
-    fetch("/api/v1/orders")
-      .then(async r => {
-        const body = await r.json().catch(() => undefined);
-        if (!r.ok) throw new Error(body?.message || `Orders unavailable (${r.status}).`);
-        return body as Order[];
-      })
-      .then(setOrders)
-      .catch(e => setError(errorText(e)));
-  }, []);
-  return { orders, error };
-}
+type PreviewTab = "signal" | "news";
 
 function LivePreviewPanel() {
   const [data, setData] = useState<PreviewData>();
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
   const [tab, setTab] = useState<PreviewTab>("signal");
-  const { orders, error: ordersError } = useRealOrders();
 
   useEffect(() => {
     let cancelled = false;
@@ -199,43 +180,11 @@ function LivePreviewPanel() {
           >
             News feed
           </button>
-          <button
-            onClick={() => setTab("orders")}
-            className={`rounded-md px-3 py-1 transition ${tab === "orders" ? "bg-white text-slate-900 shadow-sm dark:bg-slate-700 dark:text-white" : "hover:text-slate-900 dark:hover:text-white"}`}
-          >
-            Recent orders
-          </button>
         </div>
       </div>
 
       <div className="p-5 sm:p-6">
-        {tab === "orders" ? (
-          !orders && !ordersError ? (
-            <Loading />
-          ) : ordersError ? (
-            <EmptyState icon={AlertCircle} title="Order feed unavailable" subtitle={ordersError} />
-          ) : !orders || orders.length === 0 ? (
-            <EmptyState icon={Receipt} title="No orders yet." subtitle="Orders from the bot or from manual trades will appear here." />
-          ) : (
-            <div className="-m-5 rounded-b-2xl bg-slate-900 p-5 text-slate-200 dark:bg-black sm:-m-6 sm:p-6">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Alpaca execution log</span>
-                <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-400">PAPER TRADING</span>
-              </div>
-              <div className="divide-y divide-slate-800/80 font-mono text-xs">
-                {orders.slice(0, 5).map(o => (
-                  <div key={o.orderId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2.5">
-                    <span className={`font-bold ${o.side === "BUY" ? "text-emerald-400" : "text-rose-400"}`}>
-                      {o.side} {o.quantity ?? "—"} {o.symbol}
-                    </span>
-                    <span className="text-slate-400">@ <Money value={o.limitPrice} className="text-slate-300" /></span>
-                    <span className="text-[10px] uppercase tracking-wide text-slate-500">{o.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )
-        ) : loading ? (
+        {loading ? (
           <Loading />
         ) : failed || !data ? (
           <EmptyState icon={AlertCircle} title="Live preview unavailable" subtitle="Couldn't reach live market data right now — the app itself isn't affected." />
@@ -385,36 +334,42 @@ export function LandingPage() {
           <p className="mt-4 text-[11px] text-slate-400">From a 20-session historical replay evaluation — full results, including directional accuracy, on the Report page.</p>
         </div>
 
-        <div className="mt-16 grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-16 grid w-full grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {features.map(f => (
-            <div key={f.title} className="rounded-xl border border-slate-200/90 bg-white p-5 text-left shadow-sm transition hover:shadow-md dark:border-slate-800 dark:bg-slate-900">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
-                <f.icon size={17} />
+            <div key={f.title} className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-500/30">
+              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-sm shadow-indigo-600/20 transition group-hover:scale-110">
+                <f.icon size={19} />
               </div>
-              <div className="mt-3 text-sm font-bold text-slate-900 dark:text-white">{f.title}</div>
-              <p className="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.body}</p>
-              <div className="mt-3 font-mono text-[10px] font-medium text-indigo-600 dark:text-indigo-400">{f.tag}</div>
+              <div className="mt-4 text-sm font-bold text-slate-900 dark:text-white">{f.title}</div>
+              <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.body}</p>
+              <div className="mt-4 border-t border-slate-100 pt-3 font-mono text-[10px] font-semibold text-indigo-600 dark:border-slate-800 dark:text-indigo-400">{f.tag}</div>
             </div>
           ))}
         </div>
       </main>
 
-      <section id="pipeline" className="scroll-mt-24 bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-950 py-16 text-slate-100">
+      <section id="pipeline" className="scroll-mt-24 bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-950 py-20 text-slate-100">
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="mx-auto max-w-2xl text-center">
             <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">End-to-end pipeline</span>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-white sm:text-3xl">How the pipeline works</h2>
-            <p className="mt-2 text-sm text-slate-400">An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly.</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">How the pipeline works</h2>
+            <p className="mt-3 text-sm text-slate-400">An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly.</p>
           </div>
-          <div className="mt-12 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {pipelineStages.map(stage => (
-              <div key={stage.step} className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] p-5 backdrop-blur-sm">
-                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
-                  <stage.icon size={16} />
+          <div className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+            {pipelineStages.map((stage, i) => (
+              <div key={stage.step} className="relative rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] p-6 backdrop-blur-sm transition hover:border-indigo-400/40 hover:bg-indigo-500/[0.1]">
+                <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300">
+                  <stage.icon size={19} />
+                  <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white shadow-md shadow-indigo-900/40">
+                    {i + 1}
+                  </span>
                 </div>
-                <div className="mt-3 font-mono text-[10px] font-bold text-indigo-400">{stage.step}</div>
-                <div className="mt-1 text-sm font-bold text-white">{stage.title}</div>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-400">{stage.body}</p>
+                <div className="mt-4 font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-400">{stage.step}</div>
+                <div className="mt-1 text-base font-bold text-white">{stage.title}</div>
+                <p className="mt-2 text-xs leading-relaxed text-slate-400">{stage.body}</p>
+                {i < pipelineStages.length - 1 && (
+                  <div className="absolute -right-3 top-1/2 hidden h-px w-5 -translate-y-1/2 bg-gradient-to-r from-indigo-500/40 to-transparent lg:block" />
+                )}
               </div>
             ))}
           </div>
