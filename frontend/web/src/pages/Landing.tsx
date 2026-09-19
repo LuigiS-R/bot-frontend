@@ -531,8 +531,7 @@ export function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-      <div className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[52rem] w-full max-w-7xl -translate-x-1/2 bg-gradient-to-b from-indigo-500/15 via-blue-500/5 to-transparent blur-3xl" />
+    <div className="flex min-h-screen flex-col bg-gradient-to-b from-indigo-50/70 via-white to-white font-sans text-slate-900 antialiased transition-colors duration-200 dark:from-indigo-500/[0.06] dark:via-slate-950 dark:to-slate-950 dark:text-slate-100">
       <div
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[36rem] opacity-[0.35] dark:opacity-[0.12]"
         style={{
