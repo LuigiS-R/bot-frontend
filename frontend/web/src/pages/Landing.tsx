@@ -559,13 +559,13 @@ export function LandingPage() {
           </nav>
           <div className="flex items-center gap-3">
             <ConnectionPill />
-            <ThemeToggle />
             <button
               onClick={() => navigate("/dashboard")}
               className="rounded-lg bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800 dark:bg-white dark:text-slate-900 dark:hover:bg-slate-200"
             >
               Launch app
             </button>
+            <ThemeToggle />
           </div>
         </div>
       </header>
