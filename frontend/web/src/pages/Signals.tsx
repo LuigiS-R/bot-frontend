@@ -250,8 +250,8 @@ export function SentimentChart({ inputs, news }: { inputs: SignalInputs; news: N
       >
         <defs>
           <linearGradient id="signal-chart-fill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#818cf8" stopOpacity={0.22} />
-            <stop offset="100%" stopColor="#818cf8" stopOpacity={0} />
+            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.35} />
+            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
           </linearGradient>
         </defs>
 
@@ -270,7 +270,7 @@ export function SentimentChart({ inputs, news }: { inputs: SignalInputs; news: N
         </text>
 
         <path d={areaPath} fill="url(#signal-chart-fill)" stroke="none" />
-        <path d={linePath} fill="none" className="stroke-indigo-500 dark:stroke-indigo-400" strokeWidth={1.75} strokeLinejoin="round" />
+        <path d={linePath} fill="none" className="stroke-indigo-600 dark:stroke-indigo-400" strokeWidth={2.25} strokeLinejoin="round" strokeLinecap="round" />
 
         {hover && !hover.isNews && (
           <circle cx={hover.markerX} cy={hover.markerY} r={3.5} className="fill-indigo-600 dark:fill-indigo-400" />

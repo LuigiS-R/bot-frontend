@@ -167,9 +167,10 @@ function LivePreviewPanel() {
   const positive = returnPct >= 0;
   const rsi = data ? readRsi(data.inputs.features.rsi14) : null;
   const macd = data ? readMacd(data.inputs.features.macd) : null;
+  const latestHeadline = data?.news[0];
 
   return (
-    <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-200/90 bg-white text-left shadow-xl dark:border-slate-800 dark:bg-slate-900">
+    <div className="mx-auto max-w-4xl overflow-hidden rounded-2xl border border-slate-300/80 bg-white text-left shadow-xl dark:border-slate-800 dark:bg-slate-900">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200/80 px-5 py-3.5 dark:border-slate-800">
         <div className="flex items-center gap-3">
           <div className="flex gap-1.5">
@@ -208,6 +209,12 @@ function LivePreviewPanel() {
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">{data.symbol}</h3>
                   {rsi && <ReadBadge tone={rsi.tone} label={rsi.label} />}
                   {macd && <ReadBadge tone={macd.tone} label={macd.label} />}
+                  {latestHeadline?.direction && (
+                    <ReadBadge
+                      tone={latestHeadline.direction === "UP" ? "emerald" : "rose"}
+                      label={`Latest headline ${Math.round((latestHeadline.confidence ?? 0) * 100)}%`}
+                    />
+                  )}
                 </div>
                 <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Live 30-day price, fetched from Alpaca on page load</p>
               </div>
@@ -267,37 +274,43 @@ function FinbertPlayground() {
       .finally(() => setLoading(false));
   };
 
+  // The model is a binary classifier (UP vs DOWN), so its confidence in the
+  // predicted class and 1-confidence in the other class are both real, derived
+  // from the same softmax output — not an invented three-way sentiment split.
+  const bullishPct = result ? Math.round((result.direction === "UP" ? result.confidence : 1 - result.confidence) * 100) : 0;
+  const bearishPct = 100 - bullishPct;
+
   return (
-    <div id="playground" className="mt-16 w-full max-w-2xl scroll-mt-24">
-      <div className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+    <div id="playground" className="mt-20 w-full max-w-2xl scroll-mt-24">
+      <div className="mx-auto inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
         <Sparkles size={13} />
         Interactive playground
       </div>
-      <h2 className="mt-2 text-xl font-bold text-slate-900 dark:text-white">Test the real FinBERT model</h2>
+      <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Test the real FinBERT model</h2>
       <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
         Type any financial headline — this calls your actual fine-tuned model live, not a simulation.
       </p>
 
-      <div className="mt-5 rounded-2xl border border-slate-200/90 bg-white p-5 text-left shadow-sm dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex gap-2">
+      <div className="mt-6 rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
+        <div className="flex flex-col gap-2.5 sm:flex-row">
           <input
             value={text}
             onChange={e => setText(e.target.value)}
             onKeyDown={e => e.key === "Enter" && analyze(text)}
             placeholder="Paste or type a financial headline…"
-            className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           />
           <button
             onClick={() => analyze(text)}
             disabled={loading || !text.trim()}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} />}
             Analyze
           </button>
         </div>
 
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3.5 flex flex-wrap gap-2">
           <span className="self-center text-[11px] text-slate-400">Try:</span>
           {PLAYGROUND_PRESETS.map((p, i) => (
             <button
@@ -310,22 +323,24 @@ function FinbertPlayground() {
           ))}
         </div>
 
-        {error && <div className="mt-4"><ErrorPanel message={error} /></div>}
+        {error && <div className="mt-5"><ErrorPanel message={error} /></div>}
 
         {result && !error && (
-          <div className="mt-4 rounded-xl border border-slate-100 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-800/40">
+          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/40">
             <div className="flex items-center justify-between">
               <span className={`inline-flex items-center gap-1.5 text-sm font-bold ${result.direction === "UP" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {result.direction === "UP" ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
                 {result.direction === "UP" ? "Bullish signal" : "Bearish signal"}
               </span>
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{Math.round(result.confidence * 100)}% confidence</span>
+              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{Math.round(result.confidence * 100)}% model confidence</span>
             </div>
-            <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-              <div
-                className={`h-full rounded-full ${result.direction === "UP" ? "bg-emerald-500" : "bg-rose-500"}`}
-                style={{ width: `${Math.round(result.confidence * 100)}%` }}
-              />
+            <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+              <div className="h-full bg-rose-500" style={{ width: `${bearishPct}%` }} />
+              <div className="h-full bg-emerald-500" style={{ width: `${bullishPct}%` }} />
+            </div>
+            <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
+              <span className="text-rose-600 dark:text-rose-400">Bearish {bearishPct}%</span>
+              <span className="text-emerald-600 dark:text-emerald-400">Bullish {bullishPct}%</span>
             </div>
           </div>
         )}
@@ -361,10 +376,10 @@ export function LandingPage() {
               Paper
             </span>
           </div>
-          <nav className="hidden items-center gap-7 text-sm font-medium text-slate-600 dark:text-slate-300 md:flex">
+          <nav className="hidden items-center gap-6 text-sm font-semibold text-slate-600 dark:text-slate-300 md:flex">
             <a href="#preview" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Live preview</a>
-            <a href="#playground" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Playground</a>
             <a href="#pipeline" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Pipeline</a>
+            <a href="#playground" className="transition hover:text-indigo-600 dark:hover:text-indigo-400">Playground</a>
           </nav>
           <div className="flex items-center gap-3">
             <ConnectionPill />
@@ -378,7 +393,7 @@ export function LandingPage() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-4 pb-20 pt-16 text-center sm:px-6 sm:pt-24">
+      <main className="mx-auto flex w-full max-w-5xl flex-1 flex-col items-center px-4 pb-8 pt-14 text-center sm:px-6 sm:pt-20">
         <div className="inline-flex items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-3.5 py-1.5 text-xs font-semibold text-indigo-700 shadow-sm dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
           <span className="h-2 w-2 animate-pulse rounded-full bg-indigo-500 dark:bg-indigo-400" />
           Real-time AI-based stock trading system
@@ -415,13 +430,11 @@ export function LandingPage() {
           </button>
         </div>
 
-        <div id="preview" className="mt-16 w-full scroll-mt-24">
+        <div id="preview" className="mt-14 w-full scroll-mt-24">
           <LivePreviewPanel />
         </div>
 
-        <FinbertPlayground />
-
-        <div id="pipeline" className="mt-16 w-full scroll-mt-24">
+        <div id="pipeline" className="mt-20 w-full scroll-mt-24">
           <div className="mx-auto max-w-2xl text-center">
             <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
               <Radio size={12} />
@@ -433,31 +446,35 @@ export function LandingPage() {
             </p>
           </div>
 
-          <div className="relative mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="relative mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
             {pipelineStages.map((stage, i) => (
-              <div key={stage.step} className="relative flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900">
+              <div key={stage.step} className="relative flex flex-col rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-500/40">
                 <div className="flex items-start justify-between">
-                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accentClasses[stage.accent]}`}>
-                    <stage.icon size={19} />
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${accentClasses[stage.accent]}`}>
+                    <stage.icon size={21} />
                   </div>
-                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white dark:bg-white dark:text-slate-900">
+                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white dark:bg-white dark:text-slate-900">
                     {i + 1}
                   </span>
                 </div>
                 <div className={`mt-4 font-mono text-[10px] font-bold uppercase tracking-widest ${accentText[stage.accent]}`}>{stage.step}</div>
                 <div className="mt-1 text-base font-bold text-slate-900 dark:text-white">{stage.title}</div>
                 <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{stage.body}</p>
-                <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div className="mt-4 flex flex-col gap-1 border-t border-slate-100 pt-3 dark:border-slate-800">
                   <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Topic</span>
-                  <span className="truncate rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{stage.tag}</span>
+                  <span className="w-fit rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">{stage.tag}</span>
                 </div>
                 {i < pipelineStages.length - 1 && (
-                  <div className="absolute -right-3 top-1/2 hidden h-px w-5 -translate-y-1/2 bg-gradient-to-r from-slate-300 to-transparent dark:from-slate-700 lg:block" />
+                  <div className="absolute -right-6 top-12 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-400 shadow-sm lg:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
+                    <ArrowRight size={12} strokeWidth={2.5} />
+                  </div>
                 )}
               </div>
             ))}
           </div>
         </div>
+
+        <FinbertPlayground />
       </main>
 
       <SiteFooter />
