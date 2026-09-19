@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertCircle, ArrowDownRight, ArrowRight, ArrowUpRight, Database, Loader2, Newspaper,
-  Radio, Send, ShieldCheck, Sparkles, TrendingUp, Zap,
+  Radio, Send, ShieldCheck, Sparkles, Zap,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { accounts, errorText } from "../api/accountsClient";
@@ -20,41 +20,58 @@ const PLAYGROUND_PRESETS = [
   "Firm announces routine leadership transition as part of its long-planned succession process.",
 ];
 
-interface Feature { icon: LucideIcon; title: string; body: string; tag: string; }
-const features: Feature[] = [
+// One canonical list for the pipeline section — previously this content was split
+// across two near-identical sections (a feature grid and a separate pipeline
+// diagram) describing the same four stages. "tag" is the real RabbitMQ routing
+// key or service name for that stage, from the project's architecture (Fig. 1).
+interface PipelineStage { icon: LucideIcon; accent: string; step: string; title: string; body: string; tag: string; }
+const pipelineStages: PipelineStage[] = [
   {
-    icon: Newspaper,
-    title: "News sentiment",
-    body: "A fine-tuned FinBERT model reads financial headlines in real time and scores their directional impact.",
-    tag: "ProsusAI/finbert, fine-tuned",
+    icon: Database,
+    accent: "indigo",
+    step: "INGESTION",
+    title: "Market data & news",
+    body: "OHLCV bars and financial headlines are collected from Alpaca and published onto RabbitMQ.",
+    tag: "market-data, financial-news",
   },
   {
-    icon: TrendingUp,
-    title: "Price prediction",
-    body: "A multi-input LSTM combines a 20-step sequence of 11 market features with news sentiment to estimate direction.",
-    tag: "20 × 11 rolling sequence",
+    icon: Newspaper,
+    accent: "blue",
+    step: "AI ANALYSIS",
+    title: "FinBERT + LSTM",
+    body: "A fine-tuned FinBERT model scores headline sentiment in real time; a multi-input LSTM combines that with a 20-step sequence of 11 market features to estimate direction.",
+    tag: "news-sentiment, predictions",
   },
   {
     icon: ShieldCheck,
-    title: "Portfolio-aware decisions",
-    body: "Predictions below a 0.65 confidence threshold are held. Approved BUYs size to ~5% of available cash.",
-    tag: "Strategy & Decision Engine",
+    accent: "violet",
+    step: "DECISION",
+    title: "Strategy engine",
+    body: "Confidence ≥ 0.65 and portfolio-aware sizing (approved BUYs at ~5% of available cash) turn a prediction into a BUY, SELL, or HOLD.",
+    tag: "orders.approved",
   },
   {
     icon: Zap,
-    title: "Automated execution",
+    accent: "emerald",
+    step: "EXECUTION",
+    title: "Order execution",
     body: "Approved orders are validated, then submitted as LIMIT/DAY orders straight to Alpaca Paper Trading.",
     tag: "Order Execution Service",
   },
 ];
 
-interface PipelineStage { icon: LucideIcon; step: string; title: string; body: string; }
-const pipelineStages: PipelineStage[] = [
-  { icon: Database, step: "INGESTION", title: "Market data & news", body: "OHLCV bars and financial headlines collected from Alpaca, published to RabbitMQ." },
-  { icon: Newspaper, step: "AI ANALYSIS", title: "FinBERT + LSTM", body: "News sentiment and an 11-feature market sequence combine into a direction + confidence score." },
-  { icon: ShieldCheck, step: "DECISION", title: "Strategy engine", body: "Confidence ≥ 0.65 and portfolio-aware sizing turn a prediction into a BUY, SELL, or HOLD." },
-  { icon: Zap, step: "EXECUTION", title: "Order execution", body: "Approved LIMIT/DAY orders are validated and submitted to Alpaca Paper Trading." },
-];
+const accentClasses: Record<string, string> = {
+  indigo: "bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400",
+  blue: "bg-blue-50 text-blue-600 dark:bg-blue-500/10 dark:text-blue-400",
+  violet: "bg-violet-50 text-violet-600 dark:bg-violet-500/10 dark:text-violet-400",
+  emerald: "bg-emerald-50 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400",
+};
+const accentText: Record<string, string> = {
+  indigo: "text-indigo-600 dark:text-indigo-400",
+  blue: "text-blue-600 dark:text-blue-400",
+  violet: "text-violet-600 dark:text-violet-400",
+  emerald: "text-emerald-600 dark:text-emerald-400",
+};
 
 function ConnectionPill() {
   const [freshness, setFreshness] = useState<Freshness>();
@@ -404,47 +421,44 @@ export function LandingPage() {
 
         <FinbertPlayground />
 
-        <div className="mt-16 grid w-full grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {features.map(f => (
-            <div key={f.title} className="group flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-200 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900 dark:hover:border-indigo-500/30">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-600 text-white shadow-sm shadow-indigo-600/20 transition group-hover:scale-110">
-                <f.icon size={19} />
-              </div>
-              <div className="mt-4 text-sm font-bold text-slate-900 dark:text-white">{f.title}</div>
-              <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{f.body}</p>
-              <div className="mt-4 border-t border-slate-100 pt-3 font-mono text-[10px] font-semibold text-indigo-600 dark:border-slate-800 dark:text-indigo-400">{f.tag}</div>
-            </div>
-          ))}
-        </div>
-      </main>
-
-      <section id="pipeline" className="scroll-mt-24 bg-gradient-to-b from-slate-950 via-indigo-950 to-slate-950 py-20 text-slate-100">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        <div id="pipeline" className="mt-16 w-full scroll-mt-24">
           <div className="mx-auto max-w-2xl text-center">
-            <span className="text-xs font-bold uppercase tracking-widest text-indigo-400">End-to-end pipeline</span>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">How the pipeline works</h2>
-            <p className="mt-3 text-sm text-slate-400">An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly.</p>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+              <Radio size={12} />
+              End-to-end pipeline
+            </span>
+            <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">How the pipeline works</h2>
+            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+              An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly.
+            </p>
           </div>
-          <div className="mt-14 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
+
+          <div className="relative mt-12 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {pipelineStages.map((stage, i) => (
-              <div key={stage.step} className="relative rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.06] p-6 backdrop-blur-sm transition hover:border-indigo-400/40 hover:bg-indigo-500/[0.1]">
-                <div className="relative flex h-11 w-11 items-center justify-center rounded-xl bg-indigo-500/15 text-indigo-300">
-                  <stage.icon size={19} />
-                  <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-indigo-500 text-[10px] font-bold text-white shadow-md shadow-indigo-900/40">
+              <div key={stage.step} className="relative flex flex-col rounded-2xl border border-slate-200/90 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:shadow-lg dark:border-slate-800 dark:bg-slate-900">
+                <div className="flex items-start justify-between">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${accentClasses[stage.accent]}`}>
+                    <stage.icon size={19} />
+                  </div>
+                  <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white dark:bg-white dark:text-slate-900">
                     {i + 1}
                   </span>
                 </div>
-                <div className="mt-4 font-mono text-[10px] font-bold uppercase tracking-widest text-indigo-400">{stage.step}</div>
-                <div className="mt-1 text-base font-bold text-white">{stage.title}</div>
-                <p className="mt-2 text-xs leading-relaxed text-slate-400">{stage.body}</p>
+                <div className={`mt-4 font-mono text-[10px] font-bold uppercase tracking-widest ${accentText[stage.accent]}`}>{stage.step}</div>
+                <div className="mt-1 text-base font-bold text-slate-900 dark:text-white">{stage.title}</div>
+                <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{stage.body}</p>
+                <div className="mt-4 flex items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Topic</span>
+                  <span className="truncate rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{stage.tag}</span>
+                </div>
                 {i < pipelineStages.length - 1 && (
-                  <div className="absolute -right-3 top-1/2 hidden h-px w-5 -translate-y-1/2 bg-gradient-to-r from-indigo-500/40 to-transparent lg:block" />
+                  <div className="absolute -right-3 top-1/2 hidden h-px w-5 -translate-y-1/2 bg-gradient-to-r from-slate-300 to-transparent dark:from-slate-700 lg:block" />
                 )}
               </div>
             ))}
           </div>
         </div>
-      </section>
+      </main>
 
       <SiteFooter />
     </div>
