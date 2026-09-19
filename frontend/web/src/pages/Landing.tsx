@@ -219,7 +219,7 @@ function LivePreviewPanel() {
           <div>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
                   <h3 className="text-lg font-bold text-slate-900 dark:text-white">{data.symbol}</h3>
                   {rsi && <ReadBadge tone={rsi.tone} label={rsi.label} />}
                   {macd && <ReadBadge tone={macd.tone} label={macd.label} />}
@@ -270,7 +270,7 @@ function LivePreviewPanel() {
 }
 
 function FinbertPlayground() {
-  const [text, setText] = useState(PLAYGROUND_PRESETS[0]);
+  const [text, setText] = useState("");
   const [result, setResult] = useState<{ direction: "UP" | "DOWN"; confidence: number }>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -295,7 +295,7 @@ function FinbertPlayground() {
   const bearishPct = 100 - bullishPct;
 
   return (
-    <section id="playground" className="w-full scroll-mt-24 bg-white py-16 dark:bg-slate-950 sm:py-20">
+    <section id="playground" className="w-full scroll-mt-24 bg-gradient-to-b from-indigo-50/70 via-white to-white py-16 dark:from-indigo-500/[0.06] dark:via-slate-950 dark:to-slate-950 sm:py-20">
       <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
       <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
         <Sparkles size={13} />
