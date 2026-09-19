@@ -404,7 +404,7 @@ function PipelineGraph() {
   const stage = pipelineStages[active];
 
   return (
-    <section id="pipeline" className="relative w-full scroll-mt-24 overflow-hidden border-y border-slate-200 bg-slate-50 py-16 dark:border-slate-800 dark:bg-slate-900/40 sm:py-20">
+    <section id="pipeline" className="relative w-full scroll-mt-24 overflow-hidden border-y border-slate-200 bg-gradient-to-b from-indigo-50/70 via-slate-50 to-slate-50 dark:border-slate-800 dark:from-indigo-500/[0.06] dark:via-slate-900/40 dark:to-slate-900/40 py-16 sm:py-20">
       <div
         className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-[0.15]"
         style={{ backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)", backgroundSize: "22px 22px" }}
@@ -532,7 +532,7 @@ export function LandingPage() {
 
   return (
     <div className="flex min-h-screen flex-col bg-slate-50 font-sans text-slate-900 antialiased transition-colors duration-200 dark:bg-slate-950 dark:text-slate-100">
-      <div className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[28rem] w-full max-w-7xl -translate-x-1/2 bg-gradient-to-b from-indigo-500/10 via-blue-500/5 to-transparent blur-3xl" />
+      <div className="pointer-events-none fixed left-1/2 top-0 -z-10 h-[52rem] w-full max-w-7xl -translate-x-1/2 bg-gradient-to-b from-indigo-500/15 via-blue-500/5 to-transparent blur-3xl" />
       <div
         className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[36rem] opacity-[0.35] dark:opacity-[0.12]"
         style={{
