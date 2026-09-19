@@ -296,69 +296,79 @@ function FinbertPlayground() {
 
   return (
     <section id="playground" className="w-full scroll-mt-24 bg-white py-16 dark:bg-slate-950 sm:py-20">
-      <div className="mx-auto max-w-2xl px-4 text-center sm:px-6">
-      <div className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+      <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+      <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
         <Sparkles size={13} />
         Interactive playground
-      </div>
+      </span>
       <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">Test the real FinBERT model</h2>
       <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
         Type any financial headline — this calls your actual fine-tuned model live, not a simulation.
       </p>
 
-      <div className="mt-8 rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900">
-        <div className="flex flex-col gap-2.5 sm:flex-row">
-          <input
-            value={text}
-            onChange={e => setText(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && analyze(text)}
-            placeholder="Paste or type a financial headline…"
-            className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
-          />
-          <button
-            onClick={() => analyze(text)}
-            disabled={loading || !text.trim()}
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} />}
-            Analyze
-          </button>
-        </div>
-
-        <div className="mt-3.5 flex flex-wrap gap-2">
-          <span className="self-center text-[11px] text-slate-400">Try:</span>
-          {PLAYGROUND_PRESETS.map((p, i) => (
+      <div className="mt-8 grid grid-cols-1 gap-6 rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900 lg:grid-cols-12 lg:p-8">
+        <div className="lg:col-span-7">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Financial news headline</label>
+          <div className="mt-2 flex flex-col gap-2.5 sm:flex-row">
+            <input
+              value={text}
+              onChange={e => setText(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && analyze(text)}
+              placeholder="Paste or type a financial headline…"
+              className="flex-1 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 placeholder-slate-400 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+            />
             <button
-              key={i}
-              onClick={() => analyze(p)}
-              className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400"
+              onClick={() => analyze(text)}
+              disabled={loading || !text.trim()}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {p.length > 42 ? p.slice(0, 42) + "…" : p}
+              {loading ? <Loader2 size={15} className="animate-spin" /> : <Send size={14} />}
+              Analyze
             </button>
-          ))}
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <span className="self-center text-[11px] text-slate-400">Try:</span>
+            {PLAYGROUND_PRESETS.map((p, i) => (
+              <button
+                key={i}
+                onClick={() => analyze(p)}
+                className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 transition hover:border-indigo-300 hover:text-indigo-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300 dark:hover:border-indigo-500/40 dark:hover:text-indigo-400"
+              >
+                {p.length > 42 ? p.slice(0, 42) + "…" : p}
+              </button>
+            ))}
+          </div>
+
+          {error && <div className="mt-5"><ErrorPanel message={error} /></div>}
         </div>
 
-        {error && <div className="mt-5"><ErrorPanel message={error} /></div>}
-
-        {result && !error && (
-          <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/40">
-            <div className="flex items-center justify-between">
-              <span className={`inline-flex items-center gap-1.5 text-sm font-bold ${result.direction === "UP" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+        <div className="flex flex-col justify-center rounded-xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/40 lg:col-span-5">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Inference signal</span>
+          {loading ? (
+            <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+              <Loader2 size={15} className="animate-spin" /> Running on the real model…
+            </div>
+          ) : result ? (
+            <>
+              <span className={`mt-2 inline-flex w-fit items-center gap-1.5 text-sm font-bold ${result.direction === "UP" ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
                 {result.direction === "UP" ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
                 {result.direction === "UP" ? "Bullish signal" : "Bearish signal"}
               </span>
-              <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{Math.round(result.confidence * 100)}% model confidence</span>
-            </div>
-            <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
-              <div className="h-full bg-rose-500" style={{ width: `${bearishPct}%` }} />
-              <div className="h-full bg-emerald-500" style={{ width: `${bullishPct}%` }} />
-            </div>
-            <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
-              <span className="text-rose-600 dark:text-rose-400">Bearish {bearishPct}%</span>
-              <span className="text-emerald-600 dark:text-emerald-400">Bullish {bullishPct}%</span>
-            </div>
-          </div>
-        )}
+              <span className="mt-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">{Math.round(result.confidence * 100)}% model confidence</span>
+              <div className="mt-3 flex h-2.5 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                <div className="h-full bg-rose-500" style={{ width: `${bearishPct}%` }} />
+                <div className="h-full bg-emerald-500" style={{ width: `${bullishPct}%` }} />
+              </div>
+              <div className="mt-1.5 flex justify-between text-[11px] font-semibold">
+                <span className="text-rose-600 dark:text-rose-400">Bearish {bearishPct}%</span>
+                <span className="text-emerald-600 dark:text-emerald-400">Bullish {bullishPct}%</span>
+              </div>
+            </>
+          ) : (
+            <p className="mt-3 text-xs leading-relaxed text-slate-400">Type a headline and click Analyze — the result appears here.</p>
+          )}
+        </div>
       </div>
       </div>
     </section>
@@ -394,8 +404,8 @@ function PipelineGraph() {
   const stage = pipelineStages[active];
 
   return (
-    <section id="pipeline" className="w-full scroll-mt-24 border-y border-indigo-100 bg-indigo-50/50 py-16 dark:border-indigo-500/10 dark:bg-indigo-500/[0.03] sm:py-20">
-      <div className="mx-auto max-w-5xl px-4 text-center sm:px-6">
+    <section id="pipeline" className="w-full scroll-mt-24 border-y border-indigo-200 bg-indigo-100/70 py-16 dark:border-indigo-500/20 dark:bg-indigo-500/[0.07] sm:py-20">
+      <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 shadow-sm dark:border-indigo-500/20 dark:bg-slate-900 dark:text-indigo-400">
           <Radio size={12} />
