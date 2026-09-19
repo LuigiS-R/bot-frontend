@@ -142,6 +142,21 @@ function ConnectionBadge({ className = "" }: { className?: string }) {
   );
 }
 
+export function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+  const next = theme === "dark" ? "light" : "dark";
+  return (
+    <button
+      onClick={toggleTheme}
+      title={`Switch to ${next} mode`}
+      aria-label={`Switch to ${next} mode`}
+      className="flex h-8 w-8 touch-manipulation items-center justify-center rounded-lg border border-slate-200 text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 active:bg-slate-100 dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-white dark:active:bg-slate-800"
+    >
+      {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  );
+}
+
 function AccountMenu() {
   const [open, setOpen] = useState(false);
   const [account, setAccount] = useState<Account>();
@@ -253,6 +268,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
           <div className="flex items-center space-x-2 sm:space-x-3">
             <ConnectionBadge />
+            <ThemeToggle />
             <AccountMenu />
           </div>
         </div>
