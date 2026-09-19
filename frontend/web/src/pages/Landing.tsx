@@ -295,17 +295,18 @@ function FinbertPlayground() {
   const bearishPct = 100 - bullishPct;
 
   return (
-    <div id="playground" className="mt-20 w-full max-w-2xl scroll-mt-24">
-      <div className="mx-auto inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-indigo-500 dark:text-indigo-400">
+    <section id="playground" className="w-full scroll-mt-24 bg-white py-16 dark:bg-slate-950 sm:py-20">
+      <div className="mx-auto max-w-2xl px-4 text-center sm:px-6">
+      <div className="mx-auto inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
         <Sparkles size={13} />
         Interactive playground
       </div>
-      <h2 className="mt-2 text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Test the real FinBERT model</h2>
-      <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
+      <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">Test the real FinBERT model</h2>
+      <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
         Type any financial headline — this calls your actual fine-tuned model live, not a simulation.
       </p>
 
-      <div className="mt-6 rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-sm dark:border-slate-700 dark:bg-slate-900">
+      <div className="mt-8 rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-xl dark:border-slate-700 dark:bg-slate-900">
         <div className="flex flex-col gap-2.5 sm:flex-row">
           <input
             value={text}
@@ -359,7 +360,8 @@ function FinbertPlayground() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -392,9 +394,10 @@ function PipelineGraph() {
   const stage = pipelineStages[active];
 
   return (
-    <div id="pipeline" className="mt-20 w-full scroll-mt-24">
+    <section id="pipeline" className="w-full scroll-mt-24 border-y border-indigo-100 bg-indigo-50/50 py-16 dark:border-indigo-500/10 dark:bg-indigo-500/[0.03] sm:py-20">
+      <div className="mx-auto max-w-5xl px-4 text-center sm:px-6">
       <div className="mx-auto max-w-2xl text-center">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 shadow-sm dark:border-indigo-500/20 dark:bg-slate-900 dark:text-indigo-400">
           <Radio size={12} />
           Interactive architecture graph
         </span>
@@ -504,7 +507,8 @@ function PipelineGraph() {
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </section>
   );
 }
 
@@ -592,11 +596,11 @@ export function LandingPage() {
         <div id="preview" className="mt-14 w-full scroll-mt-24">
           <LivePreviewPanel />
         </div>
-
-        <PipelineGraph />
-
-        <FinbertPlayground />
       </main>
+
+      <PipelineGraph />
+
+      <FinbertPlayground />
 
       <SiteFooter />
     </div>
