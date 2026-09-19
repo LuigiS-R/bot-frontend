@@ -24,7 +24,14 @@ const PLAYGROUND_PRESETS = [
 // across two near-identical sections (a feature grid and a separate pipeline
 // diagram) describing the same four stages. "tag" is the real RabbitMQ routing
 // key or service name for that stage, from the project's architecture (Fig. 1).
-interface PipelineStage { icon: LucideIcon; accent: string; step: string; title: string; body: string; tag: string; }
+// "schema" lists the real field names each stage's message actually carries
+// (Sections 3.3/3.5/3.6/3.7 of the report) — shown as field names, never as
+// invented live values. "metric" is a real number from the report's own
+// historical-replay evaluation (Tables 7 & 8), labeled as such.
+interface PipelineStage {
+  icon: LucideIcon; accent: string; step: string; title: string; body: string; tag: string;
+  schema: string[]; metric?: { label: string; value: string };
+}
 const pipelineStages: PipelineStage[] = [
   {
     icon: Database,
@@ -33,6 +40,7 @@ const pipelineStages: PipelineStage[] = [
     title: "Market data & news",
     body: "OHLCV bars and financial headlines are collected from Alpaca and published onto RabbitMQ.",
     tag: "market-data, financial-news",
+    schema: ["open, high, low, close", "volume", "return, ma5, ma20", "volatility5, rsi14, macd"],
   },
   {
     icon: Newspaper,
@@ -41,6 +49,8 @@ const pipelineStages: PipelineStage[] = [
     title: "FinBERT + LSTM",
     body: "A fine-tuned FinBERT model scores headline sentiment in real time; a multi-input LSTM combines that with a 20-step sequence of 11 market features to estimate direction.",
     tag: "news-sentiment, predictions",
+    schema: ["ticker", "direction (UP / DOWN)", "upwardProbability, confidence", "timestamp"],
+    metric: { label: "LSTM inference latency", value: "101.7 ms mean" },
   },
   {
     icon: ShieldCheck,
@@ -49,6 +59,8 @@ const pipelineStages: PipelineStage[] = [
     title: "Strategy engine",
     body: "Confidence ≥ 0.65 and portfolio-aware sizing (approved BUYs at ~5% of available cash) turn a prediction into a BUY, SELL, or HOLD.",
     tag: "orders.approved",
+    schema: ["symbol", "decision (BUY / SELL / HOLD)", "confidenceThreshold: 0.65", "cashAllocationPct: ~5%"],
+    metric: { label: "Strategy handler latency", value: "50.6 ms mean" },
   },
   {
     icon: Zap,
@@ -57,6 +69,8 @@ const pipelineStages: PipelineStage[] = [
     title: "Order execution",
     body: "Approved orders are validated, then submitted as LIMIT/DAY orders straight to Alpaca Paper Trading.",
     tag: "Order Execution Service",
+    schema: ["symbol, side, quantity", "orderType: LIMIT", "limitPrice", "timeInForce: DAY"],
+    metric: { label: "Order fill rate", value: "99.688%" },
   },
 ];
 
@@ -349,6 +363,151 @@ function FinbertPlayground() {
   );
 }
 
+// Real exchange name from the report (Section 3.3): "the resulting market-data
+// message is published to the RabbitMQ market-data-exchange". Not a live speed —
+// the throughput figure is the historical replay's measured average (Table 7).
+const REAL_EXCHANGE_NAME = "market-data-exchange";
+const REAL_THROUGHPUT = "3.427 predictions/s avg";
+
+function PipelineGraph() {
+  const [active, setActive] = useState(0);
+  const [liveSymbol, setLiveSymbol] = useState<{ symbol: string; features: SignalInputs["features"] }>();
+
+  useEffect(() => {
+    let cancelled = false;
+    accounts.watchlists()
+      .then((lists: Watchlist[]) => {
+        const fromWatchlists = Array.from(new Set(lists.flatMap(w => w.entries.map(e => e.ticker))));
+        return fromWatchlists[0] ?? DEFAULT_TICKERS[0];
+      })
+      .catch(() => DEFAULT_TICKERS[0])
+      .then(symbol => (signals.inputs(symbol) as Promise<SignalInputs>).then(inputs => {
+        if (cancelled) return;
+        setLiveSymbol({ symbol, features: inputs.features });
+      }))
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const stage = pipelineStages[active];
+
+  return (
+    <div id="pipeline" className="mt-20 w-full scroll-mt-24">
+      <div className="mx-auto max-w-2xl text-center">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
+          <Radio size={12} />
+          Interactive architecture graph
+        </span>
+        <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">How the pipeline works</h2>
+        <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          Click any stage to inspect its real message schema and evaluation metrics from the project's report.
+        </p>
+      </div>
+
+      <div className="relative mt-10 overflow-hidden rounded-3xl border border-slate-300/80 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-slate-900 sm:p-8">
+        <div
+          className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-[0.15]"
+          style={{ backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)", backgroundSize: "22px 22px" }}
+        />
+
+        <div className="relative flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-5 dark:border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <span className="h-2.5 w-2.5 rounded-full bg-indigo-500" />
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">RabbitMQ message exchange</span>
+            <span className="rounded border border-slate-200 bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">{REAL_EXCHANGE_NAME}</span>
+          </div>
+          <span className="font-mono text-xs text-slate-400">
+            {REAL_THROUGHPUT} <span className="text-slate-300 dark:text-slate-600">· historical replay</span>
+          </span>
+        </div>
+
+        <div className="relative mt-8 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="absolute left-0 right-0 top-6 hidden h-0.5 bg-gradient-to-r from-indigo-400 via-violet-400 to-emerald-400 opacity-50 lg:block" />
+          {pipelineStages.map((s, i) => (
+            <button
+              key={s.step}
+              onClick={() => setActive(i)}
+              className={`relative z-10 flex flex-col rounded-2xl border-2 bg-white p-5 text-left shadow-sm transition hover:-translate-y-1 dark:bg-slate-900 ${
+                active === i ? "border-indigo-500 shadow-lg" : "border-slate-200 hover:border-indigo-300 dark:border-slate-700"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${accentClasses[s.accent]}`}>
+                  <s.icon size={18} />
+                </div>
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-900 text-[11px] font-bold text-white dark:bg-white dark:text-slate-900">{i + 1}</span>
+              </div>
+              <div className={`mt-3 font-mono text-[10px] font-bold uppercase tracking-widest ${accentText[s.accent]}`}>{s.step}</div>
+              <div className="mt-0.5 text-sm font-bold text-slate-900 dark:text-white">{s.title}</div>
+              <div className="mt-3 flex items-center justify-between gap-2 border-t border-slate-100 pt-2.5 dark:border-slate-800">
+                <span className="text-[10px] font-medium uppercase text-slate-400">Topic</span>
+                <span className="truncate rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{s.tag}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="relative mt-8 grid grid-cols-1 gap-5 border-t border-slate-100 pt-8 dark:border-slate-800 lg:grid-cols-12">
+          <div className="flex flex-col justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 p-5 dark:border-slate-800 dark:bg-slate-800/40 lg:col-span-4">
+            <div>
+              <div className="flex items-center justify-between">
+                <span className={`text-xs font-bold uppercase tracking-wider ${accentText[stage.accent]}`}>Stage {active + 1} detail</span>
+              </div>
+              <h3 className="mt-1 text-base font-extrabold text-slate-900 dark:text-white">{stage.title}</h3>
+              <p className="mt-1.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{stage.body}</p>
+            </div>
+            {stage.metric && (
+              <div className="border-t border-slate-200 pt-3 dark:border-slate-700">
+                <span className="block text-[10px] uppercase tracking-wide text-slate-400">{stage.metric.label}</span>
+                <span className="font-mono text-sm font-bold text-slate-900 dark:text-white">{stage.metric.value}</span>
+                <span className="ml-1.5 text-[10px] text-slate-400">(historical replay)</span>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-slate-800 bg-slate-900 p-5 font-mono text-xs text-slate-300 dark:border-slate-700 lg:col-span-8">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 text-[11px] text-slate-500">
+              <span className="flex items-center gap-2 font-bold text-white">Message schema</span>
+              <span className="rounded bg-slate-800 px-2 py-0.5 text-slate-300">{stage.tag}</span>
+            </div>
+            <div className="mt-3 space-y-2">
+              {stage.schema.map((field, i) => {
+                if (active === 0 && liveSymbol) {
+                  // Node 1 is the only stage whose fields this frontend can read live —
+                  // reuse the same real fetch shown in the preview panel above, rather
+                  // than a static example.
+                  const liveMap: Record<number, string> = {
+                    0: `open ${liveSymbol.features.open.toFixed(2)}, high ${liveSymbol.features.high.toFixed(2)}, low ${liveSymbol.features.low.toFixed(2)}, close ${liveSymbol.features.close.toFixed(2)}`,
+                    1: `volume ${liveSymbol.features.volume.toLocaleString()}`,
+                    2: `return ${(liveSymbol.features.return * 100).toFixed(2)}%, ma5 ${liveSymbol.features.ma5.toFixed(2)}, ma20 ${liveSymbol.features.ma20.toFixed(2)}`,
+                    3: `volatility5 ${(liveSymbol.features.volatility5 * 100).toFixed(2)}%, rsi14 ${liveSymbol.features.rsi14.toFixed(1)}, macd ${liveSymbol.features.macd.toFixed(2)}`,
+                  };
+                  return (
+                    <div key={i} className="flex items-center justify-between gap-3 rounded bg-slate-800/60 px-2.5 py-1.5">
+                      <span className="text-emerald-400">{liveMap[i]}</span>
+                      <span className="shrink-0 text-[10px] text-slate-500">live · {liveSymbol.symbol}</span>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={i} className="rounded bg-slate-800/60 px-2.5 py-1.5 text-slate-300">
+                    {field}
+                  </div>
+                );
+              })}
+            </div>
+            {active !== 0 && (
+              <p className="mt-3 text-[10px] leading-relaxed text-slate-500">
+                Field names only — this stage's values are produced and consumed inside the backend pipeline and aren't exposed to this frontend.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function LandingPage() {
   usePageTitle("Tradify");
   const navigate = useNavigate();
@@ -434,45 +593,7 @@ export function LandingPage() {
           <LivePreviewPanel />
         </div>
 
-        <div id="pipeline" className="mt-20 w-full scroll-mt-24">
-          <div className="mx-auto max-w-2xl text-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-400">
-              <Radio size={12} />
-              End-to-end pipeline
-            </span>
-            <h2 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 dark:text-white sm:text-3xl">How the pipeline works</h2>
-            <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
-              An event-driven microservice system — each stage communicates asynchronously through RabbitMQ rather than calling the next stage directly.
-            </p>
-          </div>
-
-          <div className="relative mt-10 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {pipelineStages.map((stage, i) => (
-              <div key={stage.step} className="relative flex flex-col rounded-2xl border border-slate-300/80 bg-white p-6 text-left shadow-sm transition hover:-translate-y-1 hover:border-indigo-300 hover:shadow-lg dark:border-slate-700 dark:bg-slate-900 dark:hover:border-indigo-500/40">
-                <div className="flex items-start justify-between">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-xl ${accentClasses[stage.accent]}`}>
-                    <stage.icon size={21} />
-                  </div>
-                  <span className="flex h-7 w-7 items-center justify-center rounded-full bg-slate-900 text-xs font-bold text-white dark:bg-white dark:text-slate-900">
-                    {i + 1}
-                  </span>
-                </div>
-                <div className={`mt-4 font-mono text-[10px] font-bold uppercase tracking-widest ${accentText[stage.accent]}`}>{stage.step}</div>
-                <div className="mt-1 text-base font-bold text-slate-900 dark:text-white">{stage.title}</div>
-                <p className="mt-2 flex-1 text-xs leading-relaxed text-slate-500 dark:text-slate-400">{stage.body}</p>
-                <div className="mt-4 flex flex-col gap-1 border-t border-slate-100 pt-3 dark:border-slate-800">
-                  <span className="text-[10px] font-medium uppercase tracking-wide text-slate-400">Topic</span>
-                  <span className="w-fit rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[10px] font-semibold leading-relaxed text-slate-600 dark:bg-slate-800 dark:text-slate-300">{stage.tag}</span>
-                </div>
-                {i < pipelineStages.length - 1 && (
-                  <div className="absolute -right-6 top-12 z-10 hidden h-6 w-6 items-center justify-center rounded-full border border-slate-300 bg-white text-slate-400 shadow-sm lg:flex dark:border-slate-700 dark:bg-slate-800 dark:text-slate-500">
-                    <ArrowRight size={12} strokeWidth={2.5} />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
+        <PipelineGraph />
 
         <FinbertPlayground />
       </main>
