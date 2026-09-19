@@ -404,8 +404,12 @@ function PipelineGraph() {
   const stage = pipelineStages[active];
 
   return (
-    <section id="pipeline" className="w-full scroll-mt-24 border-y border-indigo-200 bg-indigo-100/70 py-16 dark:border-indigo-500/20 dark:bg-indigo-500/[0.07] sm:py-20">
-      <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+    <section id="pipeline" className="relative w-full scroll-mt-24 overflow-hidden border-y border-slate-200 bg-slate-50 py-16 dark:border-slate-800 dark:bg-slate-900/40 sm:py-20">
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.4] dark:opacity-[0.15]"
+        style={{ backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)", backgroundSize: "22px 22px" }}
+      />
+      <div className="relative mx-auto max-w-4xl px-4 text-center sm:px-6">
       <div className="mx-auto max-w-2xl text-center">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white px-3 py-1 text-xs font-bold uppercase tracking-widest text-indigo-600 shadow-sm dark:border-indigo-500/20 dark:bg-slate-900 dark:text-indigo-400">
           <Radio size={12} />
