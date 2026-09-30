@@ -2,12 +2,52 @@ import type {
   Dashboard,
   NewsSignal,
   Order,
+  Position,
   PlaceOrderInput,
   SignalInputs,
   Watchlist,
 } from "./types";
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
+
+const TICKER_PATTERN = /^[A-Z][A-Z.]{0,15}$/;
+
+type LocalApiError = Error & { status: number; payload: { code: string; message: string } };
+
+function apiError(status: number, code: string, message: string): LocalApiError {
+  const error = new Error(message) as LocalApiError;
+  error.status = status;
+  error.payload = { code, message };
+  return error;
+}
+
+function normalizeTicker(value: string, required = true): string {
+  const ticker = (value ?? "").trim().toUpperCase();
+  if (required && !TICKER_PATTERN.test(ticker)) {
+    throw apiError(400, "INVALID_TICKER", "Ticker is invalid.");
+  }
+  return ticker;
+}
+
+function normalizeWatchlistName(value: string): string {
+  const name = (value ?? "").trim();
+  if (!name) throw apiError(400, "INVALID_WATCHLIST_NAME", "Watchlist name is required.");
+  return name;
+}
+
+function normalizeSymbols(values: string[]): string[] {
+  const symbols = (values ?? []).map(value => normalizeTicker(value));
+  if (new Set(symbols).size !== symbols.length) {
+    throw apiError(409, "WATCHLIST_ENTRY_EXISTS", "Ticker already exists.");
+  }
+  return symbols;
+}
+
+function findWatchlist(id: string): Watchlist {
+  const item = mockWatchlists.find(w => w.watchlist.watchlistId === id);
+  if (!item) throw apiError(404, "WATCHLIST_NOT_FOUND", "Watchlist not found.");
+  return item;
+}
 
 const companyNames: Record<string, string> = {
   AAPL: "Apple",
@@ -81,12 +121,101 @@ export const mockWatchlists: Watchlist[] = [
   },
 ];
 
+function refreshPosition(position: Position): void {
+  const profile = profileFor(position.symbol);
+  const quantity = Number(position.quantity) || 0;
+  const averageEntryPrice = Number(position.averageEntryPrice) || profile.price;
+  const currentPrice = profile.price;
+  const costBasis = quantity * averageEntryPrice;
+  const marketValue = quantity * currentPrice;
+  position.currentPrice = currentPrice.toFixed(2);
+  position.costBasis = costBasis.toFixed(2);
+  position.marketValue = marketValue.toFixed(2);
+  position.unrealizedPnl = (marketValue - costBasis).toFixed(2);
+}
+
+function recalculateAccount(): void {
+  mockDashboard.positions.forEach(refreshPosition);
+  const longMarketValue = mockDashboard.positions.reduce((sum, position) => sum + (Number(position.marketValue) || 0), 0);
+  const cash = Number(mockDashboard.account?.cash) || 0;
+  const equity = cash + longMarketValue;
+  if (mockDashboard.account) {
+    mockDashboard.account.buyingPower = cash.toFixed(2);
+    mockDashboard.account.longMarketValue = longMarketValue.toFixed(2);
+    mockDashboard.account.portfolioValue = equity.toFixed(2);
+    mockDashboard.account.equity = equity.toFixed(2);
+    mockDashboard.account.lastSyncedAt = mockDashboard.asOf;
+  }
+}
+
+function positionFor(symbol: string): Position | undefined {
+  return mockDashboard.positions.find(position => position.symbol === symbol);
+}
+
+function applyFilledOrder(order: Order): void {
+  const symbol = order.symbol ?? "";
+  const quantity = Number(order.quantity) || 0;
+  const price = Number(order.limitPrice) || profileFor(symbol).price;
+  const account = mockDashboard.account;
+  if (!account || !quantity || !price) return;
+
+  if (order.side === "BUY") {
+    const existing = positionFor(symbol);
+    if (existing) {
+      const oldQuantity = Number(existing.quantity) || 0;
+      const oldCost = Number(existing.costBasis) || oldQuantity * (Number(existing.averageEntryPrice) || price);
+      existing.quantity = (oldQuantity + quantity).toString();
+      existing.averageEntryPrice = ((oldCost + quantity * price) / (oldQuantity + quantity)).toFixed(2);
+    } else {
+      mockDashboard.positions.push({
+        symbol,
+        quantity: quantity.toString(),
+        averageEntryPrice: price.toFixed(2),
+        currentPrice: profileFor(symbol).price.toFixed(2),
+        costBasis: (quantity * price).toFixed(2),
+        marketValue: (quantity * profileFor(symbol).price).toFixed(2),
+        unrealizedPnl: (quantity * (profileFor(symbol).price - price)).toFixed(2),
+      });
+    }
+    account.cash = (Number(account.cash) - quantity * price).toFixed(2);
+  } else {
+    const existing = positionFor(symbol);
+    if (!existing) return;
+    const remaining = (Number(existing.quantity) || 0) - quantity;
+    account.cash = (Number(account.cash) + quantity * price).toFixed(2);
+    if (remaining <= 0) {
+      mockDashboard.positions = mockDashboard.positions.filter(position => position.symbol !== symbol);
+    } else {
+      existing.quantity = remaining.toString();
+    }
+  }
+
+  recalculateAccount();
+}
+
+function settlePendingOrders(): void {
+  mockOrders.forEach(order => {
+    if (order.status !== "PENDING") return;
+    const marketPrice = profileFor(order.symbol ?? "").price;
+    const limitPrice = Number(order.limitPrice) || 0;
+    const executable = order.side === "BUY" ? limitPrice >= marketPrice : limitPrice <= marketPrice;
+    if (!executable) return;
+    order.status = "FILLED";
+    order.filledQuantity = order.quantity;
+    order.updatedAt = new Date().toISOString();
+    order.reason = `${order.reason?.split(" · ")[0] ?? "Manual demo order"} · simulated fill`;
+    applyFilledOrder(order);
+  });
+}
+
 export function getMockDashboard(): Dashboard {
   return clone(mockDashboard);
 }
 
 export function refreshMockDashboard(): Dashboard {
+  settlePendingOrders();
   mockDashboard.asOf = new Date().toISOString();
+  recalculateAccount();
   return getMockDashboard();
 }
 
@@ -95,21 +224,41 @@ export function getMockOrders(): Order[] {
 }
 
 export function createMockOrder(input: PlaceOrderInput): Order {
+  const symbol = normalizeTicker(input.symbol);
+  const quantity = Number(input.quantity);
+  const limitPrice = Number(input.limitPrice);
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    throw apiError(400, "INVALID_ORDER_QUANTITY", "Order quantity must be greater than zero.");
+  }
+  if (!Number.isFinite(limitPrice) || limitPrice <= 0) {
+    throw apiError(400, "INVALID_LIMIT_PRICE", "Limit price must be greater than zero.");
+  }
+
+  const currentPosition = positionFor(symbol);
+  const availableCash = Number(mockDashboard.account?.cash) || 0;
+  const orderValue = quantity * limitPrice;
+  const insufficientCash = input.side === "BUY" && orderValue > availableCash;
+  const insufficientPosition = input.side === "SELL" && (!currentPosition || quantity > (Number(currentPosition.quantity) || 0));
   const now = new Date().toISOString();
   const order: Order = {
     orderId: `demo-order-${Date.now()}`,
-    symbol: input.symbol.toUpperCase(),
+    symbol,
     side: input.side,
-    quantity: input.quantity,
+    quantity: quantity.toString(),
     filledQuantity: "0",
     orderType: "LIMIT",
-    limitPrice: input.limitPrice,
-    status: "PENDING",
-    reason: "Manual demo order · awaiting simulated fill",
+    limitPrice: limitPrice.toFixed(2),
+    status: insufficientCash || insufficientPosition ? "REJECTED" : "PENDING",
+    reason: insufficientCash
+      ? "Insufficient buying power"
+      : insufficientPosition
+        ? "Insufficient position quantity"
+        : "Manual demo order · awaiting simulated fill",
     createdAt: now,
     updatedAt: now,
   };
   mockOrders.unshift(order);
+  if (order.status === "PENDING") settlePendingOrders();
   return clone(order);
 }
 
@@ -118,53 +267,77 @@ export function getMockWatchlists(): Watchlist[] {
 }
 
 export function getMockWatchlist(id: string): Watchlist {
-  const item = mockWatchlists.find(w => w.watchlist.watchlistId === id);
-  if (!item) throw new Error("Watchlist not found");
-  return clone(item);
+  return clone(findWatchlist(id));
 }
 
 export function createMockWatchlist(name: string, symbols: string[]): Watchlist {
+  const normalizedName = normalizeWatchlistName(name);
+  const normalizedSymbols = normalizeSymbols(symbols);
+  if (mockWatchlists.some(item => item.watchlist.name === normalizedName)) {
+    throw apiError(409, "WATCHLIST_NAME_CONFLICT", "A watchlist with this name already exists.");
+  }
   const watchlist: Watchlist = {
     watchlist: {
       watchlistId: `demo-${Date.now()}`,
-      name: name.trim() || "New watchlist",
-      syncStatus: "UNAVAILABLE",
+      name: normalizedName,
+      syncStatus: "FRESH",
     },
-    entries: symbols.map(ticker => ({ ticker: ticker.toUpperCase(), active: true })),
+    entries: normalizedSymbols.map(ticker => ({ ticker, active: true })),
   };
   mockWatchlists.push(watchlist);
   return clone(watchlist);
 }
 
-export function addMockTicker(id: string, ticker: string): Watchlist {
-  const item = mockWatchlists.find(w => w.watchlist.watchlistId === id);
-  if (!item) throw new Error("Watchlist not found");
-  const normalized = ticker.toUpperCase();
-  if (!item.entries.some(entry => entry.ticker === normalized)) {
-    item.entries.push({ ticker: normalized, active: true });
+export function updateMockWatchlist(id: string, name: string, symbols: string[]): Watchlist {
+  const item = findWatchlist(id);
+  const normalizedName = normalizeWatchlistName(name);
+  const normalizedSymbols = normalizeSymbols(symbols);
+  if (mockWatchlists.some(candidate => candidate !== item && candidate.watchlist.name === normalizedName)) {
+    throw apiError(409, "WATCHLIST_NAME_CONFLICT", "A watchlist with this name already exists.");
   }
+  item.watchlist.name = normalizedName;
+  item.entries = normalizedSymbols.map(ticker => ({ ticker, active: true }));
+  return clone(item);
+}
+
+export function getMockActiveTickers(): string[] {
+  return Array.from(new Set(
+    mockWatchlists.flatMap(item => item.entries.filter(entry => entry.active).map(entry => entry.ticker)),
+  )).sort();
+}
+
+export function addMockTicker(id: string, ticker: string): Watchlist {
+  const item = findWatchlist(id);
+  const normalized = normalizeTicker(ticker);
+  if (item.entries.some(entry => entry.ticker === normalized)) {
+    throw apiError(409, "WATCHLIST_ENTRY_EXISTS", "Ticker already exists.");
+  }
+  item.entries.push({ ticker: normalized, active: true });
   return clone(item);
 }
 
 export function toggleMockTicker(id: string, ticker: string, isActive: boolean): Watchlist {
-  const item = mockWatchlists.find(w => w.watchlist.watchlistId === id);
-  if (!item) throw new Error("Watchlist not found");
-  const entry = item.entries.find(candidate => candidate.ticker === ticker);
-  if (!entry) throw new Error("Ticker not found");
+  const item = findWatchlist(id);
+  const entry = item.entries.find(candidate => candidate.ticker === normalizeTicker(ticker));
+  if (!entry) throw apiError(404, "WATCHLIST_ENTRY_NOT_FOUND", "Ticker not found.");
   entry.active = isActive;
   return clone(item);
 }
 
 export function removeMockTicker(id: string, ticker: string): Watchlist {
-  const item = mockWatchlists.find(w => w.watchlist.watchlistId === id);
-  if (!item) throw new Error("Watchlist not found");
-  item.entries = item.entries.filter(entry => entry.ticker !== ticker);
+  const item = findWatchlist(id);
+  const normalized = normalizeTicker(ticker);
+  if (!item.entries.some(entry => entry.ticker === normalized)) {
+    throw apiError(404, "WATCHLIST_ENTRY_NOT_FOUND", "Ticker not found.");
+  }
+  item.entries = item.entries.filter(entry => entry.ticker !== normalized);
   return clone(item);
 }
 
 export function deleteMockWatchlist(id: string): void {
   const index = mockWatchlists.findIndex(w => w.watchlist.watchlistId === id);
-  if (index >= 0) mockWatchlists.splice(index, 1);
+  if (index < 0) throw apiError(404, "WATCHLIST_NOT_FOUND", "Watchlist not found.");
+  mockWatchlists.splice(index, 1);
 }
 
 interface MarketProfile {
