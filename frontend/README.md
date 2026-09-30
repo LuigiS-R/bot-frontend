@@ -1,11 +1,14 @@
 # Frontend
 
-The React UI is an unauthenticated control surface for the installation's one
-configured Alpaca paper account. It does not contain Alpaca credentials or
-implement Keycloak/OAuth. Set only `VITE_ACCOUNTS_API_BASE_URL`.
+The React UI is a self-contained paper-trading demo. It uses realistic local
+fixtures for the dashboard, orders, watchlists, market inputs, and news signals;
+no backend service or environment variable is required.
 
 ```sh
 cd frontend/web
-npm install
-npm run build
+npm ci
+npm run dev
 ```
+
+Create a production build with `npm run build` and deploy `frontend/web` to
+Vercel with `dist` as the output directory.

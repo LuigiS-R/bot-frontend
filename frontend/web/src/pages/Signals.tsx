@@ -355,7 +355,7 @@ export function SignalsPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">Signals</h1>
           <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            Live news sentiment and market inputs feeding the price prediction model — computed on request, not simulated.
+            Realistic sample news sentiment and market inputs feeding the price prediction model.
           </p>
         </div>
 

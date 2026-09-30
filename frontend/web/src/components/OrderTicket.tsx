@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ArrowDownRight, ArrowUpRight, Loader2, X } from "lucide-react";
-import { accounts, ApiError } from "../api/accountsClient";
+import { accounts } from "../api/accountsClient";
 import { useToast } from "../state/toast";
 import { PrimaryButton, SecondaryButton, StockLogo, TextField } from "./ui";
 
@@ -12,9 +12,8 @@ interface OrderTicketProps {
   onPlaced?: () => void;
 }
 
-// Mirrors the validation the Order Execution Service performs before broker submission:
-// symbol, positive quantity, BUY/SELL side, and a positive LIMIT price. Every manual
-// order is submitted as a LIMIT order with time-in-force=DAY, matching the automated pipeline.
+// Mirrors the validation used by the former order flow. Orders are recorded in
+// the local demo store and never sent to a broker.
 export function OrderTicket({ symbol: lockedSymbol, defaultSide = "BUY", defaultLimitPrice, onClose, onPlaced }: OrderTicketProps) {
   const [symbolInput, setSymbolInput] = useState(lockedSymbol ?? "");
   const [side, setSide] = useState<"BUY" | "SELL">(defaultSide);
@@ -39,11 +38,7 @@ export function OrderTicket({ symbol: lockedSymbol, defaultSide = "BUY", default
       onPlaced?.();
       onClose();
     } catch (e) {
-      if (e instanceof ApiError && (e.status === 404 || e.status >= 500)) {
-        setError("Order placement isn't available on the backend yet — the POST /api/v1/orders endpoint hasn't been implemented.");
-      } else {
-        setError((e as any)?.payload?.message || (e as any)?.message || "Order submission failed.");
-      }
+      setError((e as any)?.payload?.message || (e as any)?.message || "Demo order submission failed.");
     } finally {
       setSubmitting(false);
     }
@@ -124,7 +119,7 @@ export function OrderTicket({ symbol: lockedSymbol, defaultSide = "BUY", default
         </div>
 
         <p className="mt-3 text-[11px] leading-relaxed text-slate-400 dark:text-slate-500">
-          Submitted as a LIMIT order with time-in-force=DAY. The Order Execution Service validates the order before it reaches Alpaca Paper Trading.
+          Demo order only. It is stored locally in this browser session and no real order is submitted.
         </p>
 
         {error && (

@@ -117,7 +117,7 @@ export function DashboardPage() {
       const d = await accounts.reconcile();
       setData(d);
       setFreshness(d.freshness);
-      push("success", "Account reconciled successfully.");
+      push("success", "Demo account snapshot refreshed.");
     } catch (e) { push("error", errorText(e)); }
     finally { setReconciling(false); }
   };
@@ -188,12 +188,12 @@ export function DashboardPage() {
                   <span className={`font-medium ${freshnessMeta[data.freshness].text}`}>{freshnessMeta[data.freshness].label}</span>
                   {data.freshness === "UNAVAILABLE" && (
                     <button onClick={() => void load()} className="font-semibold text-indigo-600 underline-offset-2 hover:underline dark:text-indigo-400">
-                      Retry connecting
+                      Refresh demo data
                     </button>
                   )}
                 </div>
               ) : (
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Live synchronized metrics from your automated paper execution bot.</p>
+                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">Realistic sample metrics for a paper-trading product walkthrough.</p>
               )}
             </div>
             <div className="flex items-center gap-3">
@@ -202,7 +202,7 @@ export function DashboardPage() {
               </SecondaryButton>
               <PrimaryButton onClick={reconcile} disabled={reconciling}>
                 <RefreshCw size={14} className={reconciling ? "animate-spin" : ""} />
-                {reconciling ? "Reconciling…" : "Reconcile now"}
+                {reconciling ? "Refreshing…" : "Refresh snapshot"}
               </PrimaryButton>
             </div>
           </div>
