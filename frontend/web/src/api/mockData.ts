@@ -39,7 +39,7 @@ export const mockDashboard: Dashboard = {
     { symbol: "TSLA", quantity: "15", averageEntryPrice: "255.00", currentPrice: "238.75", costBasis: "3825.00", marketValue: "3581.25", unrealizedPnl: "-243.75" },
   ],
   asOf: new Date(Date.now() - 1000 * 60 * 8).toISOString(),
-  freshness: "UNAVAILABLE",
+  freshness: "FRESH",
 };
 
 export const mockOrders: Order[] = [
@@ -56,6 +56,13 @@ export const mockWatchlists: Watchlist[] = [
       { ticker: "AAPL", active: true },
       { ticker: "NVDA", active: true },
       { ticker: "TSLA", active: false },
+      { ticker: "MSFT", active: true },
+      { ticker: "AMZN", active: true },
+      { ticker: "AMD", active: false },
+      { ticker: "GOOGL", active: true },
+      { ticker: "META", active: true },
+      { ticker: "NFLX", active: false },
+      { ticker: "SPY", active: true },
     ],
   },
   {
@@ -168,6 +175,10 @@ const marketProfiles: Record<string, MarketProfile> = {
   AMD: { price: 171.36, change: -0.0128, rsi: 44.9, macd: -1.16, volatility: 0.029, volume: 39200000 },
   MSFT: { price: 402.5, change: 0.0061, rsi: 55.7, macd: 0.64, volatility: 0.013, volume: 18600000 },
   NVDA: { price: 129.85, change: 0.0312, rsi: 68.2, macd: 2.74, volatility: 0.026, volume: 178400000 },
+  GOOGL: { price: 196.18, change: 0.0142, rsi: 59.3, macd: 1.08, volatility: 0.016, volume: 22400000 },
+  META: { price: 571.42, change: 0.0221, rsi: 64.1, macd: 3.12, volatility: 0.021, volume: 15300000 },
+  NFLX: { price: 742.85, change: -0.0084, rsi: 48.7, macd: -0.42, volatility: 0.019, volume: 6900000 },
+  SPY: { price: 571.86, change: 0.0076, rsi: 56.9, macd: 1.26, volatility: 0.009, volume: 48200000 },
   TSLA: { price: 238.75, change: -0.0215, rsi: 39.6, macd: -2.18, volatility: 0.034, volume: 92400000 },
 };
 
