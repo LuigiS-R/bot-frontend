@@ -18,16 +18,16 @@ const toneBadge: Record<Tone, string> = {
   slate: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300",
 };
 
-function ReadBadge({ tone, label }: { tone: Tone; label: string }) {
+export function ReadBadge({ tone, label }: { tone: Tone; label: string }) {
   return <span className={`inline-flex shrink-0 rounded-md px-2 py-0.5 text-[11px] font-bold ${toneBadge[tone]}`}>{label}</span>;
 }
 
-function readRsi(v: number): { label: string; tone: Tone } {
+export function readRsi(v: number): { label: string; tone: Tone } {
   if (v >= 70) return { label: "Overbought", tone: "rose" };
   if (v <= 30) return { label: "Oversold", tone: "emerald" };
   return { label: "Neutral", tone: "slate" };
 }
-function readMacd(v: number): { label: string; tone: Tone } {
+export function readMacd(v: number): { label: string; tone: Tone } {
   return v >= 0 ? { label: "Bullish momentum", tone: "emerald" } : { label: "Bearish momentum", tone: "rose" };
 }
 function readTrend(ma5: number, ma20: number): { label: string; tone: Tone } {
@@ -102,7 +102,7 @@ function ModelInputsPanel({ features: f }: { features: MarketFeatures }) {
   );
 }
 
-function NewsRow({ item }: { item: NewsSignal }) {
+export function NewsRow({ item }: { item: NewsSignal }) {
   return (
     <a
       href={item.url}
@@ -145,7 +145,7 @@ const chartDateFormat = new Intl.DateTimeFormat(undefined, { month: "short", day
 
 interface ChartHover { pixelX: number; pixelY: number; markerX: number; markerY: number; title: string; subtitle: string; isNews: boolean; }
 
-function SentimentChart({ inputs, news }: { inputs: SignalInputs; news: NewsSignal[] }) {
+export function SentimentChart({ inputs, news }: { inputs: SignalInputs; news: NewsSignal[] }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [hover, setHover] = useState<ChartHover | null>(null);
   const points = inputs.series;

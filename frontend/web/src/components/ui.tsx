@@ -141,7 +141,7 @@ function ConnectionBadge({ className = "" }: { className?: string }) {
   );
 }
 
-function ThemeToggle() {
+export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme();
   return (
     <button
@@ -151,6 +151,21 @@ function ThemeToggle() {
     >
       {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
     </button>
+  );
+}
+
+export function SiteFooter() {
+  return (
+    <footer className="mt-12 border-t-4 border-indigo-500 bg-gradient-to-r from-indigo-100 via-violet-100 to-indigo-100 pb-24 pt-6 dark:border-indigo-500/70 dark:from-indigo-500/15 dark:via-violet-500/15 dark:to-indigo-500/15 md:pb-8">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-4 text-xs sm:flex-row sm:px-6">
+        <div className="flex items-center gap-2">
+          <Logo />
+          <span className="font-bold text-indigo-900 dark:text-white">Tradify</span>
+          <span className="text-indigo-700/70 dark:text-indigo-300/70">· Automated paper trading</span>
+        </div>
+        <span className="text-indigo-700/70 dark:text-indigo-300/70">Simulated data via Alpaca Paper Trading — no real funds involved</span>
+      </div>
+    </footer>
   );
 }
 
